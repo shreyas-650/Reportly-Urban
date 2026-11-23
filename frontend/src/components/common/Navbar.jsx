@@ -30,18 +30,12 @@ export default function Navbar() {
           <div className="flex items-center justify-between h-16">
             
             {/* Logo */}
-            <Link to="/" className="flex items-center gap-2.5 group">
-              <div className="w-10 h-10 rounded-xl bg-blue-600 flex items-center justify-center text-white shadow-sm shadow-blue-500/20 group-hover:bg-blue-700 transition-colors">
-                <ShieldCheck className="w-5 h-5" />
-              </div>
-              <div className="flex flex-col">
-                <span className="text-lg font-bold tracking-tight text-slate-900 group-hover:text-blue-600 transition-colors">
-                  Reportly<span className="text-blue-600">.Urban</span>
-                </span>
-                <span className="text-[10px] uppercase font-medium tracking-wider text-slate-400 -mt-1">
-                  Civic Action Desk
-                </span>
-              </div>
+            <Link to="/" className="flex items-center group py-1">
+              <img
+                src="/logo.png"
+                alt="Reportly Urban Logo"
+                className="h-9 sm:h-10 w-auto object-contain transition-transform group-hover:scale-102"
+              />
             </Link>
 
             {/* Desktop Navigation */}

@@ -10,14 +10,13 @@ export default function Footer() {
           
           {/* Brand Column */}
           <div className="space-y-4">
-            <div className="flex items-center gap-2.5">
-              <div className="w-9 h-9 rounded-xl bg-blue-600 flex items-center justify-center text-white">
-                <ShieldCheck className="w-5 h-5" />
-              </div>
-              <span className="text-xl font-bold tracking-tight text-white">
-                Reportly<span className="text-blue-400">.Urban</span>
-              </span>
-            </div>
+            <Link to="/" className="inline-block bg-white px-3.5 py-1.5 rounded-xl shadow-xs hover:bg-slate-50 transition-colors">
+              <img
+                src="/logo.png"
+                alt="Reportly Urban Logo"
+                className="h-7 w-auto object-contain"
+              />
+            </Link>
             <p className="text-xs text-slate-400 leading-relaxed">
               Report. Track. Resolve. Verify. Empowering citizens and municipal authorities with an AI-driven transparent civic accountability platform.
             </p>
