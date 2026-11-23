@@ -1,0 +1,60 @@
+export const ISSUE_CATEGORIES = [
+  {
+    id: 'potholes',
+    name: 'Potholes & Damaged Roads',
+    icon: 'AlertTriangle',
+    description: 'Cratered pavement, cave-ins, and uneven asphalt on arterial or neighborhood roads.',
+    department: 'Roads & Infrastructure Department',
+    slaHours: 48,
+  },
+  {
+    id: 'garbage',
+    name: 'Garbage & Waste',
+    icon: 'Trash2',
+    description: 'Overflowing dumpsters, roadside dumping, or unattended solid waste accumulation.',
+    department: 'Solid Waste Management',
+    slaHours: 24,
+  },
+  {
+    id: 'streetlights',
+    name: 'Broken Streetlights',
+    icon: 'LightbulbOff',
+    description: 'Flickering, unlit, or damaged light poles causing dark pedestrian pathways.',
+    department: 'Electrical & Lighting Board',
+    slaHours: 36,
+  },
+  {
+    id: 'water_leakage',
+    name: 'Water Supply & Leakage',
+    icon: 'Droplets',
+    description: 'Burst pipelines, contaminated water lines, or severe pressure drop in municipal supply.',
+    department: 'Water Supply & Sewerage Board',
+    slaHours: 18,
+  },
+  {
+    id: 'drainage',
+    name: 'Drainage & Sewage',
+    icon: 'Waves',
+    description: 'Blocked storm drains, open manholes, or backflowing sewage causing flooding.',
+    department: 'Stormwater & Drainage Division',
+    slaHours: 24,
+  },
+  {
+    id: 'public_infrastructure',
+    name: 'Public Infrastructure',
+    icon: 'Building2',
+    description: 'Damaged footpaths, broken traffic bollards, fallen signage, and park fences.',
+    department: 'Public Works Department (PWD)',
+    slaHours: 72,
+  },
+];
+
+export const WARDS = [
+  'Ward 1 - North Central',
+  'Ward 4 - Green Valley',
+  'Ward 7 - Metro Promenade',
+  'Ward 12 - Civic Station',
+  'Ward 15 - Lakeview District',
+  'Ward 18 - South Extension',
+  'Ward 22 - Industrial Corridor',
+];
