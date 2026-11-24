@@ -1,49 +1,163 @@
-import React from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
-import { ArrowLeft, MapPin, Calendar, Clock, Building, UserCheck, ShieldAlert, CheckCircle, Share2 } from 'lucide-react';
-import { useComplaints } from '../context/ComplaintContext';
+import {
+  ArrowLeft,
+  MapPin,
+  Calendar,
+  Clock,
+  Building,
+  ShieldAlert,
+  CheckCircle,
+  Share2,
+  AlertCircle,
+  RefreshCw,
+  Tag,
+  ShieldCheck,
+} from 'lucide-react';
 import StatusBadge from '../components/common/StatusBadge';
 import ComplaintTimeline from '../components/issues/ComplaintTimeline';
 import Button from '../components/common/Button';
-import { formatDate } from '../utils/formatters';
+import { useAuth } from '../context/AuthContext';
+import { fetchComplaintDetails } from '../services/complaintService';
+import { formatDate, formatDateTime, formatStatusLabel } from '../utils/formatters';
+
+const DEFAULT_IMAGE_FALLBACK =
+  'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&w=800&q=80';
 
 export default function IssueDetailsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { getComplaintById } = useComplaints();
+  const { user, isAuthenticated, loading: authLoading } = useAuth();
 
-  const complaint = getComplaintById(id);
+  const [complaint, setComplaint] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [copiedShare, setCopiedShare] = useState(false);
 
-  if (!complaint) {
+  const loadDetails = useCallback(async () => {
+    if (!id) return;
+
+    setLoading(true);
+    setError(null);
+
+    try {
+      const result = await fetchComplaintDetails({ identifier: id });
+
+      if (result.error) {
+        setError(result.error.message || 'Failed to retrieve complaint details.');
+        setComplaint(null);
+      } else {
+        setComplaint(result.data || null);
+      }
+    } catch (err) {
+      setError(
+        err instanceof Error ? err.message : 'An unexpected error occurred while loading complaint details.'
+      );
+      setComplaint(null);
+    } finally {
+      setLoading(false);
+    }
+  }, [id]);
+
+  useEffect(() => {
+    if (!authLoading) {
+      loadDetails();
+    }
+  }, [authLoading, loadDetails]);
+
+  const handleShare = () => {
+    if (typeof navigator !== 'undefined' && navigator.clipboard) {
+      navigator.clipboard.writeText(window.location.href);
+      setCopiedShare(true);
+      setTimeout(() => setCopiedShare(false), 2500);
+    }
+  };
+
+  // ---------------------------------------------------------------------------
+  // Loading Skeleton State
+  // ---------------------------------------------------------------------------
+  if (loading || authLoading) {
     return (
-      <div className="max-w-3xl mx-auto px-4 py-16 text-center">
-        <div className="w-14 h-14 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-4 border border-amber-200">
-          <ShieldAlert className="w-7 h-7" />
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 lg:py-16 animate-pulse space-y-6">
+        <div className="h-6 bg-slate-200 rounded w-24" />
+        <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
+          <div className="lg:col-span-7 space-y-6">
+            <div className="bg-white rounded-2xl border border-slate-200 p-8 space-y-4">
+              <div className="flex justify-between">
+                <div className="h-6 bg-slate-200 rounded w-32" />
+                <div className="h-6 bg-slate-200 rounded w-24" />
+              </div>
+              <div className="h-8 bg-slate-200 rounded w-3/4" />
+              <div className="h-4 bg-slate-200 rounded w-1/2" />
+              <div className="h-72 bg-slate-200 rounded-xl" />
+              <div className="h-20 bg-slate-200 rounded-xl" />
+            </div>
+          </div>
+          <div className="lg:col-span-5 space-y-6">
+            <div className="bg-white rounded-2xl border border-slate-200 p-7 h-96" />
+          </div>
         </div>
-        <h2 className="text-2xl font-bold text-slate-900 mb-2">Complaint Not Found</h2>
-        <p className="text-xs text-slate-600 mb-6">
-          The reference ID <span className="font-mono font-semibold">{id}</span> does not exist in the municipal registry.
-        </p>
-        <Link to="/issues">
-          <Button variant="primary" size="md" icon={ArrowLeft}>
-            Back to Explore Issues
-          </Button>
-        </Link>
       </div>
     );
   }
 
-  const handleShare = () => {
-    if (navigator.clipboard) {
-      navigator.clipboard.writeText(window.location.href);
-      alert('Grievance link copied to clipboard!');
-    }
-  };
+  // ---------------------------------------------------------------------------
+  // Not Found / Access Restricted State (Enforces RLS & Cross-Citizen Privacy)
+  // ---------------------------------------------------------------------------
+  if (!complaint && !error) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-16 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-amber-50 text-amber-600 flex items-center justify-center mx-auto mb-4 border border-amber-200">
+          <ShieldAlert className="w-8 h-8" />
+        </div>
+        <h2 className="text-2xl font-bold text-slate-900 mb-2">
+          Complaint Not Found or Access Restricted
+        </h2>
+        <p className="text-xs text-slate-600 mb-6 max-w-md mx-auto leading-relaxed">
+          The reference ID <span className="font-mono font-semibold text-slate-900">{id}</span> does not exist in your authorized municipal records or belongs to another citizen account.
+        </p>
+        <div className="flex justify-center gap-3">
+          <Link to="/dashboard">
+            <Button variant="primary" size="md" icon={ArrowLeft}>
+              Back to My Dashboard
+            </Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
 
+  // ---------------------------------------------------------------------------
+  // Error State with Retry
+  // ---------------------------------------------------------------------------
+  if (error) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 py-16 text-center">
+        <div className="w-16 h-16 rounded-2xl bg-rose-50 text-rose-600 flex items-center justify-center mx-auto mb-4 border border-rose-200">
+          <AlertCircle className="w-8 h-8" />
+        </div>
+        <h2 className="text-2xl font-bold text-slate-900 mb-2">Error Loading Complaint</h2>
+        <p className="text-xs text-rose-700 mb-6 max-w-md mx-auto">{error}</p>
+        <div className="flex justify-center gap-3">
+          <Button variant="primary" size="md" onClick={loadDetails} icon={RefreshCw}>
+            Retry Request
+          </Button>
+          <Link to="/dashboard">
+            <Button variant="outline" size="md">
+              Return to Dashboard
+            </Button>
+          </Link>
+        </div>
+      </div>
+    );
+  }
+
+  // ---------------------------------------------------------------------------
+  // Full Complaint Details & Audit Timeline View
+  // ---------------------------------------------------------------------------
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 lg:py-16">
-      
-      {/* Back button & Action Header */}
+      {/* Navigation & Action Bar */}
       <div className="flex items-center justify-between mb-6">
         <button
           type="button"
@@ -52,29 +166,27 @@ export default function IssueDetailsPage() {
         >
           <ArrowLeft className="w-4 h-4" /> Back
         </button>
+
         <div className="flex items-center gap-2">
           <button
             type="button"
             onClick={handleShare}
             className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-slate-600 hover:text-slate-900 bg-white border border-slate-200 rounded-lg shadow-2xs hover:bg-slate-50 transition-colors"
           >
-            <Share2 className="w-3.5 h-3.5" /> Share Record
+            <Share2 className="w-3.5 h-3.5" />
+            {copiedShare ? 'Copied to Clipboard!' : 'Share Record'}
           </button>
         </div>
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8 items-start">
-        
-        {/* Left Column: Complaint Details & Media */}
+        {/* Left Column: Complaint Details & Photographic Media */}
         <div className="lg:col-span-7 space-y-6">
-          
-          {/* Main Card */}
           <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-8 shadow-xs">
-            
             {/* Header info */}
             <div className="flex flex-wrap items-center justify-between gap-2 mb-4">
               <span className="font-mono text-xs font-bold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-md border border-blue-200/60">
-                {complaint.id}
+                {complaint.complaint_number || complaint.id}
               </span>
               <StatusBadge status={complaint.status} size="md" />
             </div>
@@ -93,29 +205,29 @@ export default function IssueDetailsPage() {
               <span>•</span>
               <span className="flex items-center gap-1.5">
                 <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                Reported {formatDate(complaint.reportedDate)} at {complaint.reportedTime || '09:00 AM'}
+                Reported {formatDateTime(complaint.created_at)}
               </span>
             </div>
 
-            {/* Primary Photo */}
+            {/* Primary Incident Photograph (Signed Private Storage URL with Fallback) */}
             <div className="mb-6 rounded-xl overflow-hidden border border-slate-200 bg-slate-100">
               <div className="p-2.5 bg-slate-50 border-b border-slate-200 text-xs font-semibold text-slate-700 flex justify-between items-center">
                 <span>Citizen Incident Evidence</span>
                 <span className="text-[11px] text-slate-400 font-normal">Original Submission</span>
               </div>
               <img
-                src={complaint.image}
+                src={complaint.imageUrl || DEFAULT_IMAGE_FALLBACK}
                 alt={complaint.title}
-                className="w-full h-80 object-cover"
+                className="w-full h-80 object-cover bg-slate-100"
                 onError={(e) => {
                   e.target.onerror = null;
-                  e.target.src = 'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&w=800&q=80';
+                  e.target.src = DEFAULT_IMAGE_FALLBACK;
                 }}
               />
             </div>
 
-            {/* Completion Photo if resolved */}
-            {complaint.completionImage && (
+            {/* Municipal Completion Proof (if resolved with completion photograph) */}
+            {complaint.completionImageUrl && (
               <div className="mb-6 rounded-xl overflow-hidden border border-emerald-200 bg-emerald-50/30">
                 <div className="p-2.5 bg-emerald-100/60 border-b border-emerald-200 text-xs font-semibold text-emerald-800 flex justify-between items-center">
                   <span className="flex items-center gap-1.5">
@@ -124,14 +236,18 @@ export default function IssueDetailsPage() {
                   <span className="text-[11px] text-emerald-700 font-mono">Work Verified</span>
                 </div>
                 <img
-                  src={complaint.completionImage}
+                  src={complaint.completionImageUrl}
                   alt="Remediation completed proof"
                   className="w-full h-72 object-cover"
+                  onError={(e) => {
+                    e.target.onerror = null;
+                    e.target.src = DEFAULT_IMAGE_FALLBACK;
+                  }}
                 />
               </div>
             )}
 
-            {/* Description */}
+            {/* Problem Description */}
             <div>
               <h3 className="text-sm font-bold text-slate-900 mb-2">
                 Problem Description & Citizen Statement
@@ -140,47 +256,50 @@ export default function IssueDetailsPage() {
                 {complaint.description}
               </p>
             </div>
-
           </div>
 
-          {/* Department Responsibility Card */}
+          {/* Department Responsibility & Priority Card */}
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
             <h3 className="text-sm font-bold text-slate-900 mb-4 flex items-center gap-2">
               <Building className="w-4 h-4 text-blue-600" />
-              Administrative Routing
+              Administrative Routing & Classification
             </h3>
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100">
                 <span className="text-slate-400 block mb-1">Responsible Municipal Department</span>
-                <span className="font-semibold text-slate-800 text-sm">{complaint.department}</span>
+                <span className="font-semibold text-slate-800 text-sm">
+                  {complaint.departmentName || 'Awaiting Department Assignment'}
+                </span>
               </div>
-              <div className="p-3 bg-slate-50 rounded-xl border border-slate-100">
-                <span className="text-slate-400 block mb-1">Assigned Field Engineer</span>
-                <span className="font-semibold text-slate-800 text-sm">{complaint.assignedOfficer || 'Desk Assigned'}</span>
+              <div className="p-3.5 bg-slate-50 rounded-xl border border-slate-100">
+                <span className="text-slate-400 block mb-1">Civic Category & Priority</span>
+                <div className="flex items-center gap-2 mt-0.5">
+                  <span className="font-semibold text-slate-800 text-sm capitalize">
+                    {complaint.category?.replace(/_/g, ' ')}
+                  </span>
+                  <span className="text-[11px] font-medium uppercase px-2 py-0.5 rounded bg-blue-50 text-blue-700 border border-blue-200">
+                    {complaint.priority || 'Normal'} Priority
+                  </span>
+                </div>
               </div>
             </div>
           </div>
-
         </div>
 
         {/* Right Column: Progress Timeline */}
         <div className="lg:col-span-5 space-y-6">
-          
           <div className="bg-white rounded-2xl border border-slate-200 p-6 sm:p-7 shadow-xs">
             <div className="flex items-center justify-between mb-6 pb-4 border-b border-slate-100">
               <div>
-                <h3 className="text-base font-bold text-slate-900">
-                  Resolution Progress
-                </h3>
-                <p className="text-xs text-slate-500 mt-0.5">
-                  Real-time municipal audit trail
-                </p>
+                <h3 className="text-base font-bold text-slate-900">Resolution Progress</h3>
+                <p className="text-xs text-slate-500 mt-0.5">Real-time municipal audit trail</p>
               </div>
               <StatusBadge status={complaint.status} size="sm" />
             </div>
 
+            {/* Citizen-Safe Real-time Audit Timeline */}
             <ComplaintTimeline
-              timeline={complaint.timeline}
+              timeline={complaint.timeline || []}
               currentStatus={complaint.status}
             />
           </div>
@@ -192,14 +311,11 @@ export default function IssueDetailsPage() {
               Automated Escalation Policy
             </h4>
             <p className="leading-relaxed text-blue-800">
-              If an assigned officer does not post an update or initiate work within the stipulated SLA timeframe, this complaint is automatically flagged in the Municipal Admin Escalation Queue.
+              Complaints submitted via ReportlyUrban are bound to municipal service level agreements. If triage or field action is delayed, the complaint is automatically flagged for administrative review.
             </p>
           </div>
-
         </div>
-
       </div>
-
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import React from 'react';
-import { getStatusColor } from '../../utils/formatters';
+import { getStatusColor, formatStatusLabel } from '../../utils/formatters';
 
 export default function StatusBadge({ status, size = 'md' }) {
   const colors = getStatusColor(status);
@@ -10,7 +10,7 @@ export default function StatusBadge({ status, size = 'md' }) {
       className={`inline-flex items-center gap-1.5 font-medium rounded-full border ${colors.bg} ${colors.text} ${colors.border} ${sizeStyles}`}
     >
       <span className={`w-1.5 h-1.5 rounded-full ${colors.dot}`} />
-      {status || 'Pending'}
+      {formatStatusLabel(status)}
     </span>
   );
 }

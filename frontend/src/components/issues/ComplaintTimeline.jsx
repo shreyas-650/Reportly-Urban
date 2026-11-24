@@ -1,14 +1,17 @@
 import React from 'react';
-import { Check, Clock, AlertCircle } from 'lucide-react';
+import { Check, Clock, AlertCircle, XCircle } from 'lucide-react';
+import { formatDateTime, formatStatusLabel } from '../../utils/formatters';
 
-export default function ComplaintTimeline({ timeline = [], currentStatus = 'Pending' }) {
+export default function ComplaintTimeline({ timeline = [], currentStatus = 'submitted' }) {
   if (!timeline || timeline.length === 0) {
     return (
       <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl text-center text-xs text-slate-500">
-        No timeline events logged yet.
+        No timeline audit events logged yet.
       </div>
     );
   }
+
+  const isRejected = currentStatus === 'rejected';
 
   return (
     <div className="flow-root">
@@ -16,13 +19,14 @@ export default function ComplaintTimeline({ timeline = [], currentStatus = 'Pend
         {timeline.map((step, stepIdx) => {
           const isLast = stepIdx === timeline.length - 1;
           const isCompleted = step.completed;
-          
+
           const isCurrentActive =
-            !isCompleted &&
-            (stepIdx === 0 || timeline[stepIdx - 1]?.completed);
+            !isCompleted && (stepIdx === 0 || timeline[stepIdx - 1]?.completed);
+
+          const stepIsRejected = step.status === 'rejected';
 
           return (
-            <li key={step.stage || stepIdx}>
+            <li key={step.id || step.status || stepIdx}>
               <div className="relative pb-8">
                 {/* Connecting line */}
                 {!isLast && (
@@ -37,7 +41,11 @@ export default function ComplaintTimeline({ timeline = [], currentStatus = 'Pend
                 <div className="relative flex items-start space-x-3.5">
                   {/* Step Icon */}
                   <div>
-                    {isCompleted ? (
+                    {stepIsRejected ? (
+                      <span className="h-8 w-8 rounded-full bg-rose-600 flex items-center justify-center text-white ring-4 ring-white shadow-xs">
+                        <XCircle className="w-4 h-4" />
+                      </span>
+                    ) : isCompleted ? (
                       <span className="h-8 w-8 rounded-full bg-blue-600 flex items-center justify-center text-white ring-4 ring-white shadow-xs">
                         <Check className="w-4 h-4" />
                       </span>
@@ -52,29 +60,26 @@ export default function ComplaintTimeline({ timeline = [], currentStatus = 'Pend
                     )}
                   </div>
 
-                  {/* Step Details */}
+                  {/* Citizen-Safe Step Details: status, stage title, timestamp ONLY */}
                   <div className="min-w-0 flex-1 pt-1.5">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
                       <h4
                         className={`text-sm font-bold ${
-                          isCompleted
+                          stepIsRejected
+                            ? 'text-rose-700'
+                            : isCompleted
                             ? 'text-slate-900'
                             : isCurrentActive
                             ? 'text-blue-600'
                             : 'text-slate-500'
                         }`}
                       >
-                        {step.title || step.stage}
+                        {step.title || step.stage_title || formatStatusLabel(step.status)}
                       </h4>
                       <span className="text-xs text-slate-400 font-mono">
-                        {step.date}
+                        {step.created_at ? formatDateTime(step.created_at) : step.date}
                       </span>
                     </div>
-                    {step.notes && (
-                      <p className="mt-1 text-xs text-slate-600 leading-relaxed">
-                        {step.notes}
-                      </p>
-                    )}
                   </div>
                 </div>
               </div>
