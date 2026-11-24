@@ -353,7 +353,7 @@ BEGIN
   UPDATE public.ai_analysis_usage
   SET status = 'refunded',
       finalized_at = pg_catalog.now(),
-      error_reason = pg_catalog.substr(pg_catalog.coalesce(p_error_reason, 'Analysis failed'), 1, 500)
+      error_reason = pg_catalog.substr(COALESCE(p_error_reason, 'Analysis failed'), 1, 500)
   WHERE id = p_reservation_id
     AND status = 'reserved';
 
@@ -472,6 +472,15 @@ BEGIN
      NOT pg_catalog.has_function_privilege('service_role', 'public.finalize_ai_analysis_quota(uuid)', 'EXECUTE') OR
      NOT pg_catalog.has_function_privilege('service_role', 'public.refund_ai_analysis_quota(uuid,text)', 'EXECUTE') THEN
     RAISE EXCEPTION 'Verification Failed: service_role missing EXECUTE on quota management procedures.';
+  END IF;
+
+  -- 8.7 Smoke-verify finalize and refund execution paths with non-existent UUID (must return FALSE without runtime SQL errors)
+  IF public.finalize_ai_analysis_quota('00000000-0000-0000-0000-000000000000'::uuid) IS DISTINCT FROM FALSE THEN
+    RAISE EXCEPTION 'Verification Failed: finalize_ai_analysis_quota did not return FALSE for missing reservation.';
+  END IF;
+
+  IF public.refund_ai_analysis_quota('00000000-0000-0000-0000-000000000000'::uuid, NULL) IS DISTINCT FROM FALSE THEN
+    RAISE EXCEPTION 'Verification Failed: refund_ai_analysis_quota did not return FALSE for missing reservation.';
   END IF;
 END $$;
 

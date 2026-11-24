@@ -4,14 +4,18 @@ Loads configuration from environment variables with safe defaults.
 """
 
 import os
+from pathlib import Path
 from typing import List
 from pydantic import BaseModel
 from dotenv import load_dotenv
 
-# Load from backend/.env then root .env then frontend/.env
-load_dotenv('backend/.env')
-load_dotenv('.env')
-load_dotenv('frontend/.env')
+_BACKEND_DIR = Path(__file__).resolve().parent.parent
+_REPO_ROOT = _BACKEND_DIR.parent
+
+# Load from backend/.env then root .env then frontend/.env regardless of working directory
+load_dotenv(_BACKEND_DIR / ".env")
+load_dotenv(_REPO_ROOT / ".env")
+load_dotenv(_REPO_ROOT / "frontend" / ".env")
 
 class Settings(BaseModel):
     # Gemini Configuration

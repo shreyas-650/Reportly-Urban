@@ -229,6 +229,26 @@ class TestGeminiServiceLogic(unittest.IsolatedAsyncioTestCase):
         self.assertIsNone(result.suggestions)
         self.assertIn("length constraints", result.uncertainty_reason)
 
+    async def test_malformed_json_from_gemini_rejected_safely(self):
+        client = self._create_mock_client("{broken json response...")
+        result = await analyze_civic_image(b'fake_bytes', 'image/jpeg', client)
+        self.assertFalse(result.is_civic_issue)
+        self.assertIsNone(result.suggestions)
+        self.assertIn("did not conform to structured schema", result.uncertainty_reason)
+
+    async def test_out_of_range_confidence_rejected_safely(self):
+        raw_json = (
+            '{"is_civic_issue": true, "detected_issue": "Pothole", '
+            '"suggested_category": "potholes", "suggested_title": "Deep pothole", '
+            '"suggested_description": "A large pothole on the main asphalt roadway.", '
+            '"confidence": 1.75, "uncertainty_reason": null}'
+        )
+        client = self._create_mock_client(raw_json)
+        result = await analyze_civic_image(b'fake_bytes', 'image/jpeg', client)
+        self.assertFalse(result.is_civic_issue)
+        self.assertIsNone(result.suggestions)
+        self.assertIn("did not conform to structured schema", result.uncertainty_reason)
+
 
 class TestQuotaServiceLogic(unittest.IsolatedAsyncioTestCase):
     """Test quota reservations, finalization, refunding, and concurrency locks."""

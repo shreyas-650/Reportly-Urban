@@ -69,6 +69,33 @@ class TestPhase5MockedEndpoints(unittest.TestCase):
         res = self.client.post("/api/ai/analyze-issue", files=files, headers=headers)
         self.assertEqual(res.status_code, 401)
 
+    @patch("app.services.auth_service.get_jwks_client")
+    def test_expired_jwt_returns_401(self, mock_jwks_client):
+        import jwt as pyjwt
+        mock_client_inst = MagicMock()
+        mock_client_inst.get_signing_key_from_jwt.return_value = MagicMock(key="dummy")
+        mock_jwks_client.return_value = mock_client_inst
+
+        with patch("app.services.auth_service.jwt.decode", side_effect=pyjwt.ExpiredSignatureError("Signature has expired")):
+            jpeg_bytes = create_synthetic_jpeg_bytes()
+            files = {"file": ("test.jpg", jpeg_bytes, "image/jpeg")}
+            headers = {"Authorization": "Bearer expired.jwt.token"}
+            res = self.client.post("/api/ai/analyze-issue", files=files, headers=headers)
+            self.assertEqual(res.status_code, 401)
+            self.assertIn("expired", res.json()["detail"].lower())
+
+    def test_corrupted_jpeg_image_rejected_with_422(self):
+        app.dependency_overrides[get_citizen_user] = lambda: "citizen-uuid-mock"
+        try:
+            # Valid JPEG magic bytes followed by corrupt payload
+            corrupt_jpeg = b'\xff\xd8\xff\xe0\x00\x10JFIF_CORRUPTED_DATA_NOT_DECODABLE'
+            files = {"file": ("corrupt.jpg", corrupt_jpeg, "image/jpeg")}
+            res = self.client.post("/api/ai/analyze-issue", files=files)
+            self.assertEqual(res.status_code, 422)
+            self.assertIn("Image decoding failed", res.json()["detail"])
+        finally:
+            app.dependency_overrides.pop(get_citizen_user, None)
+
     @patch("app.services.auth_service.verify_supabase_jwt")
     @patch("httpx.AsyncClient.get")
     def test_officer_role_returns_403(self, mock_http_get, mock_verify_jwt):
