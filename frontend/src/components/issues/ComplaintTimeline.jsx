@@ -60,7 +60,7 @@ export default function ComplaintTimeline({ timeline = [], currentStatus = 'subm
                     )}
                   </div>
 
-                  {/* Citizen-Safe Step Details: status, stage title, timestamp ONLY */}
+                  {/* Citizen-Safe Step Details: status, stage title, timestamp, and public explanation */}
                   <div className="min-w-0 flex-1 pt-1.5">
                     <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-1">
                       <h4
@@ -80,6 +80,28 @@ export default function ComplaintTimeline({ timeline = [], currentStatus = 'subm
                         {step.created_at ? formatDateTime(step.created_at) : step.date}
                       </span>
                     </div>
+
+                    {/* Public citizen-facing explanation / statement */}
+                    {step.public_description && (
+                      <div
+                        className={`mt-2 text-xs leading-relaxed p-3 rounded-xl border ${
+                          stepIsRejected
+                            ? 'bg-rose-50/80 border-rose-200 text-rose-800'
+                            : step.status === 'resolved'
+                            ? 'bg-emerald-50/80 border-emerald-200 text-emerald-900'
+                            : 'bg-slate-50 border-slate-200 text-slate-700'
+                        }`}
+                      >
+                        <p className="font-medium text-[11px] uppercase tracking-wider text-slate-500 mb-1">
+                          {stepIsRejected
+                            ? 'Administrative Rejection Reason'
+                            : step.status === 'resolved'
+                            ? 'Verified Resolution Summary'
+                            : 'Public Municipal Update'}
+                        </p>
+                        <p className="font-normal">{step.public_description}</p>
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

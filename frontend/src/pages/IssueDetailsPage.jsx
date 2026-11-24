@@ -247,6 +247,19 @@ export default function IssueDetailsPage() {
               </div>
             )}
 
+            {/* Official Resolution Summary (if resolved) */}
+            {complaint.resolution_description && (
+              <div className="mb-6 p-4 rounded-xl border border-emerald-200 bg-emerald-50/50">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-emerald-800 mb-1.5 flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" />
+                  Official Municipal Resolution Statement
+                </h3>
+                <p className="text-sm text-emerald-950 leading-relaxed font-medium">
+                  {complaint.resolution_description}
+                </p>
+              </div>
+            )}
+
             {/* Problem Description */}
             <div>
               <h3 className="text-sm font-bold text-slate-900 mb-2">

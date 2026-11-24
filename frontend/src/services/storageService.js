@@ -11,10 +11,29 @@ const MIME_TO_EXTENSION = {
 };
 
 // Strict RFC 4122 UUID v4 regex (version 4, variant 1 [89ab])
-const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+export const UUID_V4_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
+// Strict RFC 4122 generic UUID regex (supports database UUIDs for complaints)
+export const UUID_ANY_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 // Strict storage path regex: <citizen-uuid-v4>/<file-uuid-v4>.<ext>
-const STORAGE_PATH_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(jpg|jpeg|png|webp)$/i;
+export const INCIDENT_STORAGE_PATH_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(jpg|jpeg|png|webp)$/i;
+
+// Strict resolution storage path regex: resolution/<complaint-uuid>/<file-uuid-v4>.<ext>
+export const RESOLUTION_STORAGE_PATH_REGEX = /^resolution\/[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}\.(jpg|jpeg|png|webp)$/i;
+
+// Backward-compatible alias
+export const STORAGE_PATH_REGEX = INCIDENT_STORAGE_PATH_REGEX;
+
+/**
+ * Validates whether a storage path strictly matches either incident evidence or resolution proof format.
+ * @param {string} path
+ * @returns {boolean}
+ */
+export function isValidStoragePath(path) {
+  if (!path || typeof path !== 'string') return false;
+  return INCIDENT_STORAGE_PATH_REGEX.test(path) || RESOLUTION_STORAGE_PATH_REGEX.test(path);
+}
 
 /**
  * Validates file type and size according to civic reporting storage guidelines.
@@ -117,10 +136,81 @@ export async function uploadComplaintImage({ file, userId }) {
 }
 
 /**
- * Generates a temporary signed URL for authorized viewing of a private complaint image.
- * Validates path formatting and enforces valid expiry limits (1 to 86,400 seconds).
+ * Generates an isolated, path-traversal-proof resolution storage path for a complaint.
+ * Path format: "resolution/<complaintId>/<fileId>.<extension>"
  *
- * @param {string} storagePath - Relative path inside the complaint-images bucket (<citizen-uuid>/<file-uuid>.<ext>)
+ * @param {string} complaintId - UUID of the complaint being resolved
+ * @param {string} mimeType - MIME type of the verified image
+ * @returns {string} Sanitized object path
+ */
+export function generateResolutionStoragePath(complaintId, mimeType) {
+  if (!complaintId || typeof complaintId !== 'string' || !UUID_ANY_REGEX.test(complaintId)) {
+    throw new Error('A valid complaint UUID is required to generate a resolution storage path.');
+  }
+
+  if (typeof crypto === 'undefined' || typeof crypto.randomUUID !== 'function') {
+    throw new Error('Cryptographically secure UUID generation (crypto.randomUUID) is unavailable in this environment.');
+  }
+
+  const extension = MIME_TO_EXTENSION[mimeType];
+  if (!extension) {
+    throw new Error(`Unsupported MIME type: '${mimeType}'. Only JPEG, PNG, and WebP images are allowed.`);
+  }
+
+  const fileId = crypto.randomUUID();
+
+  return `resolution/${complaintId}/${fileId}.${extension}`;
+}
+
+/**
+ * Uploads a municipal resolution evidence photograph to the private Supabase Storage bucket.
+ * Does not overwrite existing files (upsert: false).
+ * Returns the relative storage path (e.g., "resolution/complaintId/uuid.jpg").
+ *
+ * @param {Object} params
+ * @param {File} params.file - File object to upload
+ * @param {string} params.complaintId - UUID of the complaint being resolved
+ * @returns {Promise<{ data: { path: string } | null, error: Error | null }>}
+ */
+export async function uploadResolutionImage({ file, complaintId }) {
+  try {
+    const validation = validateImageFile(file);
+    if (!validation.valid) {
+      return { data: null, error: new Error(validation.error) };
+    }
+
+    const objectPath = generateResolutionStoragePath(complaintId, file.type);
+
+    const { data, error } = await supabase.storage
+      .from(COMPLAINT_STORAGE_BUCKET)
+      .upload(objectPath, file, {
+        cacheControl: '3600',
+        upsert: false,
+      });
+
+    if (error) {
+      return { data: null, error };
+    }
+
+    return {
+      data: {
+        path: data.path,
+      },
+      error: null,
+    };
+  } catch (err) {
+    return {
+      data: null,
+      error: err instanceof Error ? err : new Error(String(err)),
+    };
+  }
+}
+
+/**
+ * Generates a temporary signed URL for authorized viewing of a private complaint or resolution image.
+ * Validates path formatting against strict incident or resolution patterns and enforces valid expiry limits.
+ *
+ * @param {string} storagePath - Relative path inside the complaint-images bucket
  * @param {number} [expiresIn=3600] - Expiry in seconds (defaults to 1 hour, max 24 hours)
  * @returns {Promise<{ data: { signedUrl: string } | null, error: Error | null }>}
  */
@@ -135,11 +225,11 @@ export async function getSignedImageUrl(storagePath, expiresIn = 3600) {
       ? storagePath.replace(`${COMPLAINT_STORAGE_BUCKET}/`, '')
       : storagePath;
 
-    // Validate path against strict storage path specification
-    if (!STORAGE_PATH_REGEX.test(cleanPath)) {
+    // Validate path against strict storage path specification (incident or resolution)
+    if (!isValidStoragePath(cleanPath)) {
       return {
         data: null,
-        error: new Error('Malformed storage path. Expected format: <citizen-uuid-v4>/<file-uuid-v4>.<extension>'),
+        error: new Error('Malformed storage path. Expected format: <citizen-uuid>/<file-uuid>.<ext> or resolution/<complaint-uuid>/<file-uuid>.<ext>'),
       };
     }
 

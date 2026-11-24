@@ -19,14 +19,23 @@ import {
   FileText,
   User,
   Phone,
+  Upload,
+  Image as ImageIcon,
+  Check,
+  XCircle,
+  Lock,
+  ShieldCheck,
 } from 'lucide-react';
 import {
   fetchAdminComplaintDetails,
   fetchAdminDepartments,
   fetchActiveDepartmentOfficers,
   assignComplaintAdmin,
+  transitionComplaintStatus,
   isComplaintOverdue,
 } from '../../services/adminService';
+import { uploadResolutionImage, validateImageFile } from '../../services/storageService';
+import { useAuth } from '../../context/AuthContext';
 import StatusBadge from '../../components/common/StatusBadge';
 import PriorityBadge from '../../components/common/PriorityBadge';
 import { formatDateTime } from '../../utils/formatters';
@@ -51,6 +60,125 @@ export default function AdminComplaintDetailsPage() {
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+
+  // Auth & Roles
+  const { profile, officerRecord } = useAuth();
+  const isAdmin = profile?.role === 'admin';
+  const isAssignedOfficer = Boolean(
+    officerRecord?.id && complaint?.assigned_officer_id && officerRecord.id === complaint.assigned_officer_id
+  );
+
+  // Status Workflow Transition State
+  const [transitionModalOpen, setTransitionModalOpen] = useState(false);
+  const [transitionTarget, setTransitionTarget] = useState(null);
+  const [publicDescription, setPublicDescription] = useState('');
+  const [internalNote, setInternalNote] = useState('');
+  const [resolutionFile, setResolutionFile] = useState(null);
+  const [resolutionPreview, setResolutionPreview] = useState(null);
+  const [transitionSubmitting, setTransitionSubmitting] = useState(false);
+  const [transitionError, setTransitionError] = useState(null);
+  const [transitionSuccess, setTransitionSuccess] = useState(false);
+  const [concurrencyAlert, setConcurrencyAlert] = useState(null);
+
+  const handleOpenTransitionModal = (target) => {
+    setTransitionTarget(target);
+    setPublicDescription('');
+    setInternalNote('');
+    setResolutionFile(null);
+    setResolutionPreview(null);
+    setTransitionError(null);
+    setConcurrencyAlert(null);
+    setTransitionSuccess(false);
+    setTransitionModalOpen(true);
+  };
+
+  const handleResolutionFileChange = (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    const validation = validateImageFile(file);
+    if (!validation.valid) {
+      setTransitionError(validation.error);
+      return;
+    }
+    setTransitionError(null);
+    setResolutionFile(file);
+    setResolutionPreview(URL.createObjectURL(file));
+  };
+
+  const handleSubmitTransition = async (e) => {
+    e.preventDefault();
+    if (!complaint || !transitionTarget) return;
+
+    setTransitionSubmitting(true);
+    setTransitionError(null);
+    setConcurrencyAlert(null);
+
+    try {
+      // 1. Validation checks
+      if (transitionTarget === 'rejected') {
+        if (!publicDescription || publicDescription.trim().length < 5) {
+          throw new Error('A detailed public rejection explanation (at least 5 characters) is required.');
+        }
+      }
+
+      let uploadedPath = null;
+      if (transitionTarget === 'resolved') {
+        if (!publicDescription || publicDescription.trim().length < 10) {
+          throw new Error('A clear public resolution summary (at least 10 characters) is required.');
+        }
+        if (!resolutionFile) {
+          throw new Error('A completion evidence photograph is required to resolve this complaint.');
+        }
+
+        // Upload file to Supabase Storage resolution path
+        const uploadRes = await uploadResolutionImage({
+          file: resolutionFile,
+          complaintId: complaint.id,
+        });
+
+        if (uploadRes.error) {
+          throw new Error(`Failed to upload resolution evidence: ${uploadRes.error.message}`);
+        }
+        uploadedPath = uploadRes.data.path;
+      }
+
+      // 2. Execute RPC transition
+      const { error: rpcError } = await transitionComplaintStatus({
+        complaintId: complaint.id,
+        newStatus: transitionTarget,
+        expectedUpdatedAt: complaint.updated_at,
+        publicDescription: publicDescription.trim() || null,
+        internalNote: internalNote.trim() || null,
+        resolutionImagePath: uploadedPath,
+      });
+
+      if (rpcError) {
+        // Concurrency conflict check (SQLSTATE 40001)
+        if (rpcError.message?.includes('Concurrency Conflict') || rpcError.code === '40001' || rpcError.code === 'P0002') {
+          setConcurrencyAlert(
+            'Concurrency Conflict: This record was modified by another user or session. Reloading the latest data...'
+          );
+          setTimeout(() => {
+            setTransitionModalOpen(false);
+            loadDetails();
+          }, 2000);
+          return;
+        }
+        throw rpcError;
+      }
+
+      setTransitionSuccess(true);
+      setTimeout(() => {
+        setTransitionModalOpen(false);
+        setTransitionSuccess(false);
+        loadDetails();
+      }, 1000);
+    } catch (err) {
+      setTransitionError(err instanceof Error ? err.message : String(err));
+    } finally {
+      setTransitionSubmitting(false);
+    }
+  };
 
   // Load complaint details and departments
   const loadDetails = async () => {
@@ -289,6 +417,16 @@ export default function AdminComplaintDetailsPage() {
               </div>
             )}
 
+            {/* Verified Resolution Statement if resolved */}
+            {complaint.resolution_description && (
+              <div className="p-4 bg-emerald-50 rounded-xl border border-emerald-200 text-xs space-y-1">
+                <span className="font-bold text-emerald-800 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                  <ShieldCheck className="w-4 h-4 text-emerald-600" /> Verified Municipal Resolution Statement
+                </span>
+                <p className="text-emerald-950 font-medium leading-relaxed">{complaint.resolution_description}</p>
+              </div>
+            )}
+
             {/* Location & Citizen Data Grid */}
             <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-4 border-t border-slate-100 text-xs">
               {/* Location */}
@@ -413,18 +551,44 @@ export default function AdminComplaintDetailsPage() {
                   {complaint.statusHistory.map((sh) => (
                     <div
                       key={sh.id}
-                      className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 text-xs flex items-center justify-between"
+                      className="p-3 bg-slate-50 rounded-xl border border-slate-200/80 text-xs space-y-2"
                     >
-                      <div className="space-y-0.5">
+                      <div className="flex items-center justify-between">
                         <div className="flex items-center gap-2">
                           <StatusBadge status={sh.status} size="sm" />
                           <span className="font-semibold text-slate-800">{sh.title}</span>
+                          {sh.actor && (
+                            <span className="text-[10px] text-slate-400 font-mono">
+                              by {sh.actor.full_name || 'Staff'} ({sh.actor.role})
+                            </span>
+                          )}
                         </div>
-                        {sh.notes && <p className="text-slate-500 text-[11px] mt-0.5">{sh.notes}</p>}
+                        <span className="text-[11px] font-mono text-slate-400">
+                          {formatDateTime(sh.created_at)}
+                        </span>
                       </div>
-                      <span className="text-[11px] font-mono text-slate-400">
-                        {formatDateTime(sh.created_at)}
-                      </span>
+
+                      {sh.public_description && (
+                        <div className="p-2.5 bg-white rounded-lg border border-slate-200/80 text-[11px] text-slate-700 leading-relaxed">
+                          <span className="font-bold text-slate-500 uppercase tracking-wider block text-[10px] mb-0.5">
+                            Public Explanation:
+                          </span>
+                          {sh.public_description}
+                        </div>
+                      )}
+
+                      {sh.internal_note && (
+                        <div className="p-2.5 bg-amber-50/80 rounded-lg border border-amber-200/80 text-[11px] text-amber-900 leading-relaxed">
+                          <span className="font-bold text-amber-700 uppercase tracking-wider flex items-center gap-1 text-[10px] mb-0.5">
+                            <Lock className="w-3 h-3 text-amber-600" /> Internal Remark (Restricted):
+                          </span>
+                          {sh.internal_note}
+                        </div>
+                      )}
+
+                      {sh.notes && !sh.public_description && !sh.internal_note && (
+                        <p className="text-slate-500 text-[11px] mt-0.5">{sh.notes}</p>
+                      )}
                     </div>
                   ))}
                 </div>
@@ -435,6 +599,118 @@ export default function AdminComplaintDetailsPage() {
 
         {/* Right Column: Triage & Assignment Workspace */}
         <div className="space-y-6">
+          {/* Status & Lifecycle Actions Card */}
+          <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2">
+                <RefreshCw className="w-4 h-4 text-blue-600" />
+                <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
+                  Status & Workflow
+                </h2>
+              </div>
+              <StatusBadge status={complaint.status} size="sm" />
+            </div>
+
+            {/* Terminal State Warning */}
+            {complaint.status === 'resolved' || complaint.status === 'rejected' ? (
+              <div className="p-3.5 bg-slate-50 border border-slate-200 rounded-xl text-slate-600 text-xs flex items-start gap-2.5">
+                <Lock className="w-4 h-4 text-slate-400 shrink-0 mt-0.5" />
+                <div>
+                  <p className="font-bold text-slate-800">Workflow Completed (Terminal State)</p>
+                  <p className="text-[11px] text-slate-500 mt-0.5">
+                    This complaint is marked as <strong className="capitalize">{complaint.status}</strong>. Its status is immutable in this phase.
+                  </p>
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-3 text-xs">
+                {/* Current Workflow Guidance */}
+                <div className="p-3 bg-blue-50/60 border border-blue-200/70 rounded-xl text-blue-900">
+                  <span className="font-bold block mb-0.5">Current Stage:</span>
+                  {complaint.status === 'submitted' && 'Awaiting initial administrative review & department dispatch.'}
+                  {complaint.status === 'under_review' && 'Reviewed by admin; awaiting assigned officer remediation.'}
+                  {complaint.status === 'in_progress' && 'Field remediation active; awaiting completion proof.'}
+                </div>
+
+                {/* Action Buttons */}
+                <div className="space-y-2 pt-1">
+                  {/* Stage 1: Submitted -> Under Review */}
+                  {complaint.status === 'submitted' && (
+                    <>
+                      {isAdmin ? (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenTransitionModal('under_review')}
+                          className="w-full py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition shadow-xs flex items-center justify-center gap-2"
+                        >
+                          <Check className="w-4 h-4" /> Move to Under Review
+                        </button>
+                      ) : (
+                        <p className="text-[11px] text-slate-400 italic text-center">
+                          Administrative review is required to advance from submitted status.
+                        </p>
+                      )}
+                    </>
+                  )}
+
+                  {/* Stage 2: Under Review -> In Progress */}
+                  {complaint.status === 'under_review' && (
+                    <>
+                      {!complaint.assigned_officer_id || !complaint.department_id ? (
+                        <div className="p-2.5 bg-amber-50 border border-amber-200 rounded-xl text-amber-800 text-[11px]">
+                          <AlertTriangle className="w-3.5 h-3.5 inline mr-1 text-amber-600" />
+                          Assign a department and officer below before commencing fieldwork.
+                        </div>
+                      ) : isAdmin || isAssignedOfficer ? (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenTransitionModal('in_progress')}
+                          className="w-full py-2.5 px-3 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-xl transition shadow-xs flex items-center justify-center gap-2"
+                        >
+                          <Check className="w-4 h-4" /> Commence Fieldwork (In Progress)
+                        </button>
+                      ) : (
+                        <p className="text-[11px] text-slate-400 italic text-center">
+                          Only the assigned officer or an administrator can commence fieldwork.
+                        </p>
+                      )}
+                    </>
+                  )}
+
+                  {/* Stage 3: In Progress -> Resolved */}
+                  {complaint.status === 'in_progress' && (
+                    <>
+                      {isAdmin || isAssignedOfficer ? (
+                        <button
+                          type="button"
+                          onClick={() => handleOpenTransitionModal('resolved')}
+                          className="w-full py-2.5 px-3 bg-emerald-600 hover:bg-emerald-700 text-white font-bold rounded-xl transition shadow-xs flex items-center justify-center gap-2"
+                        >
+                          <ShieldCheck className="w-4 h-4" /> Submit Completion Proof & Resolve
+                        </button>
+                      ) : (
+                        <p className="text-[11px] text-slate-400 italic text-center">
+                          Only the assigned officer or an administrator can submit resolution proof.
+                        </p>
+                      )}
+                    </>
+                  )}
+
+                  {/* Administrative Rejection (Strictly Admin-Only) */}
+                  {isAdmin && (
+                    <button
+                      type="button"
+                      onClick={() => handleOpenTransitionModal('rejected')}
+                      className="w-full py-2 px-3 bg-rose-50 hover:bg-rose-100 border border-rose-200 text-rose-700 font-semibold rounded-xl transition flex items-center justify-center gap-1.5"
+                    >
+                      <XCircle className="w-3.5 h-3.5 text-rose-600" /> Reject Complaint (Admin Only)
+                    </button>
+                  )}
+                </div>
+              </div>
+            )}
+          </div>
+
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-6 sticky top-20">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
@@ -621,6 +897,190 @@ export default function AdminComplaintDetailsPage() {
                 Confirm & Dispatch
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+      {/* Status Transition Modal */}
+      {transitionModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-2xs p-4">
+          <div className="bg-white rounded-2xl max-w-lg w-full p-6 shadow-xl border border-slate-200 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-3">
+              <div className="flex items-center gap-2.5">
+                {transitionTarget === 'resolved' ? (
+                  <div className="w-9 h-9 rounded-full bg-emerald-50 text-emerald-600 flex items-center justify-center shrink-0">
+                    <ShieldCheck className="w-5 h-5" />
+                  </div>
+                ) : transitionTarget === 'rejected' ? (
+                  <div className="w-9 h-9 rounded-full bg-rose-50 text-rose-600 flex items-center justify-center shrink-0">
+                    <XCircle className="w-5 h-5" />
+                  </div>
+                ) : (
+                  <div className="w-9 h-9 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center shrink-0">
+                    <RefreshCw className="w-5 h-5" />
+                  </div>
+                )}
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">
+                    {transitionTarget === 'resolved' && 'Submit Completion Proof & Resolve'}
+                    {transitionTarget === 'rejected' && 'Reject Complaint (Permanent)'}
+                    {transitionTarget === 'in_progress' && 'Commence Field Remediation'}
+                    {transitionTarget === 'under_review' && 'Move Under Municipal Review'}
+                  </h3>
+                  <p className="text-xs text-slate-500">
+                    Target status: <strong className="capitalize">{transitionTarget?.replace('_', ' ')}</strong>
+                  </p>
+                </div>
+              </div>
+              <button
+                type="button"
+                onClick={() => setTransitionModalOpen(false)}
+                className="text-slate-400 hover:text-slate-600 p-1 rounded-lg transition"
+              >
+                ✕
+              </button>
+            </div>
+
+            {concurrencyAlert && (
+              <div className="p-3 bg-amber-50 border border-amber-200 rounded-xl text-amber-900 text-xs flex items-center gap-2 animate-pulse">
+                <AlertCircle className="w-4 h-4 text-amber-600 shrink-0" />
+                <span>{concurrencyAlert}</span>
+              </div>
+            )}
+
+            {transitionError && (
+              <div className="p-3 bg-rose-50 border border-rose-200 rounded-xl text-rose-800 text-xs flex items-center gap-2">
+                <AlertTriangle className="w-4 h-4 text-rose-600 shrink-0" />
+                <span>{transitionError}</span>
+              </div>
+            )}
+
+            {transitionSuccess && (
+              <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-xl text-emerald-800 text-xs flex items-center gap-2">
+                <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" />
+                <span>Status transition successfully recorded in civic audit trail!</span>
+              </div>
+            )}
+
+            <form onSubmit={handleSubmitTransition} className="space-y-4 text-xs">
+              {/* If resolving: require resolution photo upload */}
+              {transitionTarget === 'resolved' && (
+                <div>
+                  <label className="block font-semibold text-slate-700 mb-1">
+                    Resolution Completion Evidence Photograph *{' '}
+                    <span className="text-slate-400 font-normal">(JPEG, PNG, WebP up to 8MB)</span>
+                  </label>
+                  <div className="border-2 border-dashed border-slate-300 hover:border-blue-500 rounded-xl p-4 text-center cursor-pointer bg-slate-50 transition relative">
+                    <input
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      onChange={handleResolutionFileChange}
+                      className="absolute inset-0 w-full h-full opacity-0 cursor-pointer"
+                      required
+                    />
+                    {resolutionPreview ? (
+                      <div className="space-y-2">
+                        <img
+                          src={resolutionPreview}
+                          alt="Completion Proof Preview"
+                          className="max-h-40 mx-auto rounded-lg object-contain border border-slate-200"
+                        />
+                        <p className="text-[11px] text-emerald-700 font-semibold flex items-center justify-center gap-1">
+                          <Check className="w-3.5 h-3.5" /> File Selected: {resolutionFile?.name} (
+                          {(resolutionFile?.size / (1024 * 1024)).toFixed(2)} MB)
+                        </p>
+                        <p className="text-[10px] text-slate-400">Click to choose a different photo</p>
+                      </div>
+                    ) : (
+                      <div className="space-y-1 text-slate-500 py-3">
+                        <Upload className="w-6 h-6 mx-auto text-slate-400" />
+                        <p className="font-semibold text-slate-700">Click to upload completion photo</p>
+                        <p className="text-[11px] text-slate-400">
+                          Civic completion proof is verified and displayed to citizens
+                        </p>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
+
+              {/* Public description */}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
+                  {transitionTarget === 'resolved' && 'Public Resolution Statement * (Visible to Citizen)'}
+                  {transitionTarget === 'rejected' && 'Public Rejection Explanation * (Visible to Citizen)'}
+                  {(transitionTarget === 'under_review' || transitionTarget === 'in_progress') &&
+                    'Public Note (Optional, Visible to Citizen)'}
+                </label>
+                <textarea
+                  value={publicDescription}
+                  onChange={(e) => setPublicDescription(e.target.value)}
+                  rows={3}
+                  required={transitionTarget === 'resolved' || transitionTarget === 'rejected'}
+                  placeholder={
+                    transitionTarget === 'resolved'
+                      ? 'Describe work completed (e.g., "Road surface repaved with hot asphalt mix; site inspected and cleared for vehicular traffic.")'
+                      : transitionTarget === 'rejected'
+                      ? 'Explain clearly why this complaint was rejected (e.g., "Duplicate report of #RU-2026-0012 already addressed under work order 412.")'
+                      : 'Optional public statement regarding current remediation stage...'
+                  }
+                  className="w-full py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+                />
+                <p className="text-[11px] text-slate-400 mt-1">
+                  {transitionTarget === 'resolved' && 'Minimum 10 characters required.'}
+                  {transitionTarget === 'rejected' && 'Minimum 5 characters required.'}
+                </p>
+              </div>
+
+              {/* Private internal note */}
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1 flex items-center gap-1">
+                  <Lock className="w-3 h-3 text-slate-400" />
+                  Internal Staff Remark <span className="text-slate-400 font-normal">(Optional — Never exposed to citizens)</span>
+                </label>
+                <textarea
+                  value={internalNote}
+                  onChange={(e) => setInternalNote(e.target.value)}
+                  rows={2}
+                  placeholder="Operational notes, contractor details, or internal review remarks..."
+                  className="w-full py-2 px-3 bg-slate-50 border border-slate-200 rounded-xl text-slate-900 font-medium focus:bg-white focus:ring-2 focus:ring-blue-500/20 focus:border-blue-500 transition"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-3 pt-3 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setTransitionModalOpen(false)}
+                  disabled={transitionSubmitting}
+                  className="px-4 py-2 bg-slate-100 text-slate-700 hover:bg-slate-200 font-semibold text-xs rounded-xl transition"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={transitionSubmitting}
+                  className={`px-4 py-2 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 ${
+                    transitionTarget === 'resolved'
+                      ? 'bg-emerald-600 hover:bg-emerald-700'
+                      : transitionTarget === 'rejected'
+                      ? 'bg-rose-600 hover:bg-rose-700'
+                      : 'bg-blue-600 hover:bg-blue-700'
+                  }`}
+                >
+                  {transitionSubmitting ? (
+                    <>
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin" />
+                      Committing Transition...
+                    </>
+                  ) : (
+                    <>
+                      <Check className="w-3.5 h-3.5" />
+                      Confirm Status Transition
+                    </>
+                  )}
+                </button>
+              </div>
+            </form>
           </div>
         </div>
       )}

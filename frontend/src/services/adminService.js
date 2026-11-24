@@ -253,13 +253,16 @@ export async function fetchAdminComplaintDetails(identifier) {
       }
     }
 
-    // Fetch Status History
+    // Fetch Status History (with audit columns: previous_status, public_description, internal_note)
     const { data: statusHistory, error: historyErr } = await supabase
       .from('complaint_status_history')
       .select(`
         id,
         status,
+        previous_status,
         title,
+        public_description,
+        internal_note,
         notes,
         created_at,
         actor:profiles!actor_id (
@@ -272,6 +275,29 @@ export async function fetchAdminComplaintDetails(identifier) {
 
     if (historyErr) {
       console.warn('[adminService] Error fetching status history:', historyErr);
+    }
+
+    // Fetch Resolution Evidence Metadata if available
+    let resolutionEvidence = null;
+    try {
+      const { data: evidenceData } = await supabase
+        .from('complaint_resolution_evidence')
+        .select(`
+          id,
+          storage_path,
+          file_size_bytes,
+          mime_type,
+          created_at,
+          uploader:profiles!uploaded_by (
+            full_name
+          )
+        `)
+        .eq('complaint_id', complaint.id)
+        .maybeSingle();
+
+      resolutionEvidence = evidenceData || null;
+    } catch (evidenceErr) {
+      console.warn('[adminService] Error fetching resolution evidence:', evidenceErr);
     }
 
     // Fetch Assignment Audit Timeline
@@ -316,6 +342,7 @@ export async function fetchAdminComplaintDetails(identifier) {
         isOverdue: isComplaintOverdue(complaint),
         statusHistory: statusHistory || [],
         assignmentAudit: assignmentAudit || [],
+        resolutionEvidence,
       },
       error: null,
     };
@@ -547,6 +574,56 @@ export async function updateOfficerStatus({ officerId, isActive, newDepartmentId
     return { data, error: null };
   } catch (err) {
     console.error('[adminService] updateOfficerStatus error:', err);
+    return { data: null, error: err };
+  }
+}
+
+/**
+ * Transitions a complaint status atomically via RPC public.transition_complaint_status().
+ * Enforces role checks, transition matrix, optimistic concurrency (expectedUpdatedAt),
+ * and evidence verification inside the database transaction.
+ *
+ * @param {Object} params
+ * @param {string} params.complaintId - UUID of the complaint
+ * @param {string} params.newStatus - Target complaint_status ('under_review', 'in_progress', 'resolved', 'rejected')
+ * @param {string} params.expectedUpdatedAt - Exact updated_at timestamp string from Supabase (never re-serialized through JS Date)
+ * @param {string} [params.publicDescription] - Public explanation to the citizen (mandatory for resolved and rejected)
+ * @param {string} [params.internalNote] - Private internal remark for municipal staff
+ * @param {string} [params.resolutionImagePath] - Storage path of uploaded completion photo (mandatory for resolved)
+ * @returns {Promise<{ data: any, error: Error | null }>}
+ */
+export async function transitionComplaintStatus({
+  complaintId,
+  newStatus,
+  expectedUpdatedAt,
+  publicDescription = null,
+  internalNote = null,
+  resolutionImagePath = null,
+}) {
+  try {
+    if (!complaintId) {
+      throw new Error('Complaint ID is required.');
+    }
+    if (!newStatus) {
+      throw new Error('New status is required.');
+    }
+    if (!expectedUpdatedAt || typeof expectedUpdatedAt !== 'string') {
+      throw new Error('Exact expectedUpdatedAt timestamp string is required for concurrency control.');
+    }
+
+    const { data, error } = await supabase.rpc('transition_complaint_status', {
+      p_complaint_id: complaintId,
+      p_new_status: newStatus,
+      p_expected_updated_at: expectedUpdatedAt,
+      p_public_description: publicDescription || null,
+      p_internal_note: internalNote || null,
+      p_resolution_image_path: resolutionImagePath || null,
+    });
+
+    if (error) throw error;
+    return { data, error: null };
+  } catch (err) {
+    console.error('[adminService] transitionComplaintStatus error:', err);
     return { data: null, error: err };
   }
 }

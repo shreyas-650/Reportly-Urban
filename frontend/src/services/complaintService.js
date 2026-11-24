@@ -698,10 +698,10 @@ export async function fetchComplaintDetails({ identifier, supabaseClient = supab
     }
 
     // Fetch safe audit history from security-barrier view public_complaint_history
-    // Strictly contains: id, complaint_id, status, stage_title, created_at. Never exposes actor_id or notes.
+    // Strictly contains: id, complaint_id, status, stage_title, created_at, public_description. Never exposes actor_id or internal_note.
     const { data: historyData, error: historyError } = await supabaseClient
       .from('public_complaint_history')
-      .select('id, complaint_id, status, stage_title, created_at')
+      .select('id, complaint_id, status, stage_title, created_at, public_description')
       .eq('complaint_id', complaint.id)
       .order('created_at', { ascending: true });
 
@@ -713,6 +713,7 @@ export async function fetchComplaintDetails({ identifier, supabaseClient = supab
       id: step.id,
       status: step.status,
       title: step.stage_title,
+      public_description: step.public_description || null,
       created_at: step.created_at,
       date: step.created_at,
       completed: complaint.status === 'resolved' || idx < (historyData?.length ?? 0) - 1,
@@ -722,6 +723,7 @@ export async function fetchComplaintDetails({ identifier, supabaseClient = supab
       data: {
         ...complaint,
         departmentName: complaint.department?.name || 'Unassigned',
+        resolution_description: complaint.resolution_description || null,
         imageUrl: signedImageUrl,
         completionImageUrl: signedCompletionUrl,
         timeline,
