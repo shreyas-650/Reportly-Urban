@@ -150,7 +150,7 @@ async function recoverySelectByIdempotencyKey(supabaseClient, idempotencyKey) {
   try {
     const result = await supabaseClient
       .from('complaints')
-      .select('id, complaint_number, status, title, category, ward, location, description, image_url, created_at')
+      .select('id, complaint_number, status, title, category, ward, location, description, image_url, created_at, latitude, longitude')
       .eq('idempotency_key', idempotencyKey)
       .maybeSingle();
 
@@ -334,7 +334,7 @@ export async function createComplaint({
       .from('complaints')
       .insert(payload)
       .select(
-        'id, complaint_number, status, title, category, ward, location, description, image_url, created_at'
+        'id, complaint_number, status, title, category, ward, location, description, image_url, created_at, latitude, longitude'
       )
       .single();
 
@@ -492,6 +492,8 @@ export async function fetchCitizenComplaints({ supabaseClient = supabase } = {})
         description,
         location,
         ward,
+        latitude,
+        longitude,
         status,
         priority,
         image_url,
@@ -618,6 +620,8 @@ export async function fetchComplaintDetails({ identifier, supabaseClient = supab
       description,
       location,
       ward,
+      latitude,
+      longitude,
       status,
       priority,
       image_url,

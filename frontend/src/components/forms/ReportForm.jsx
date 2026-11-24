@@ -16,6 +16,7 @@ import {
   UserX,
 } from 'lucide-react';
 import Button from '../common/Button';
+import LocationPickerMap from '../maps/LocationPickerMap';
 import { ISSUE_CATEGORIES, WARDS } from '../../data/categories';
 import { useAuth } from '../../context/AuthContext';
 import { createComplaint, UUID_V4_REGEX } from '../../services/complaintService';
@@ -92,6 +93,8 @@ export default function ReportForm() {
         description: restored.payload.description || '',
         location: restored.payload.location || '',
         ward: restored.payload.ward || '',
+        latitude: typeof restored.payload.latitude === 'number' ? restored.payload.latitude : null,
+        longitude: typeof restored.payload.longitude === 'number' ? restored.payload.longitude : null,
         imagePreview: '',
         imageFileName: restored.storagePath ? restored.storagePath.split('/').pop() : '',
       };
@@ -102,6 +105,8 @@ export default function ReportForm() {
       description: '',
       location: '',
       ward: '',
+      latitude: null,
+      longitude: null,
       imagePreview: '',
       imageFileName: '',
     };
@@ -277,6 +282,8 @@ export default function ReportForm() {
           ward: formData.ward.trim(),
           location: formData.location.trim(),
           description: formData.description.trim(),
+          latitude: typeof formData.latitude === 'number' ? formData.latitude : null,
+          longitude: typeof formData.longitude === 'number' ? formData.longitude : null,
         };
         submissionStoragePath = uploadedStoragePath;
         submissionFile = selectedFile;
@@ -309,6 +316,8 @@ export default function ReportForm() {
         ward: submissionPayload.ward,
         location: submissionPayload.location,
         description: submissionPayload.description,
+        latitude: submissionPayload.latitude,
+        longitude: submissionPayload.longitude,
         file: submissionFile,
         uploadedStoragePath: submissionStoragePath,
         idempotencyKey: submissionKey,
@@ -386,6 +395,8 @@ export default function ReportForm() {
       description: '',
       location: '',
       ward: '',
+      latitude: null,
+      longitude: null,
       imagePreview: '',
       imageFileName: '',
     });
@@ -445,6 +456,14 @@ export default function ReportForm() {
             <span className="text-slate-500">Ward:</span>
             <span className="font-medium text-slate-800">{createdComplaint.ward}</span>
           </div>
+          {createdComplaint.latitude != null && createdComplaint.longitude != null && (
+            <div className="flex justify-between items-center text-xs">
+              <span className="text-slate-500">Geospatial Coordinates:</span>
+              <span className="font-mono text-slate-700">
+                {Number(createdComplaint.latitude).toFixed(5)}, {Number(createdComplaint.longitude).toFixed(5)}
+              </span>
+            </div>
+          )}
           <div className="flex justify-between items-center text-xs">
             <span className="text-slate-500">Registered At:</span>
             <span className="font-medium text-slate-800">
@@ -616,6 +635,35 @@ export default function ReportForm() {
         </div>
 
         <div>
+          <label className="block text-sm font-semibold text-slate-800 mb-1">
+            Pin Location on Map (Optional GPS / Search)
+          </label>
+          <p className="text-xs text-slate-500 mb-2.5">
+            Pin the issue on the interactive map or use GPS detection to record precise coordinates for field workers.
+          </p>
+          <div className="mb-4">
+            <LocationPickerMap
+              coordinates={
+                formData.latitude != null && formData.longitude != null
+                  ? { latitude: formData.latitude, longitude: formData.longitude }
+                  : null
+              }
+              initialAddress={formData.location}
+              disabled={isSubmitting || isFormLocked}
+              onLocationSelect={({ latitude, longitude, address }) => {
+                setFormData((prev) => ({
+                  ...prev,
+                  latitude,
+                  longitude,
+                  location: prev.location.trim() ? prev.location : (address || prev.location),
+                }));
+                if (address && !formData.location.trim()) {
+                  setErrors((prev) => ({ ...prev, location: null }));
+                }
+              }}
+            />
+          </div>
+
           <label className="block text-sm font-semibold text-slate-800 mb-1.5">
             Exact Location or Landmark <span className="text-rose-500">*</span>
           </label>

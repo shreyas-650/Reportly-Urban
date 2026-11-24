@@ -38,6 +38,7 @@ import { uploadResolutionImage, validateImageFile } from '../../services/storage
 import { useAuth } from '../../context/AuthContext';
 import StatusBadge from '../../components/common/StatusBadge';
 import PriorityBadge from '../../components/common/PriorityBadge';
+import ComplaintLocationMap from '../../components/maps/ComplaintLocationMap';
 import { formatDateTime } from '../../utils/formatters';
 
 export default function AdminComplaintDetailsPage() {
@@ -466,6 +467,22 @@ export default function AdminComplaintDetailsPage() {
                   </div>
                 </div>
               </div>
+            </div>
+
+            {/* Geospatial Map & Navigation Directions */}
+            <div className="pt-4 border-t border-slate-100">
+              <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700 mb-3 flex items-center gap-1.5">
+                <MapPin className="w-4 h-4 text-blue-600" />
+                Geospatial Incident Map & Navigation
+              </h3>
+              <ComplaintLocationMap
+                latitude={complaint.latitude}
+                longitude={complaint.longitude}
+                locationName={complaint.location}
+                ward={complaint.ward}
+                complaintNumber={complaint.complaint_number}
+                showDirections={true}
+              />
             </div>
           </div>
 
