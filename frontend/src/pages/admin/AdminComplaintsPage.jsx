@@ -14,10 +14,13 @@ import {
   AlertCircle,
   X,
   Clock,
+  Map,
+  List,
 } from 'lucide-react';
 import { fetchAdminComplaints, fetchAdminDepartments, isComplaintOverdue } from '../../services/adminService';
 import StatusBadge from '../../components/common/StatusBadge';
 import PriorityBadge from '../../components/common/PriorityBadge';
+import AdminComplaintsMap from '../../components/maps/AdminComplaintsMap';
 import { formatDateTime, formatDate } from '../../utils/formatters';
 
 export default function AdminComplaintsPage() {
@@ -25,6 +28,7 @@ export default function AdminComplaintsPage() {
   const [departments, setDepartments] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [viewMode, setViewMode] = useState('table'); // 'table' | 'map'
 
   // Filters & Search State
   const [search, setSearch] = useState('');
@@ -123,7 +127,35 @@ export default function AdminComplaintsPage() {
             Dispatch, department routing, and live SLA monitoring across all municipal wards.
           </p>
         </div>
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2">
+          {/* View Mode Switcher */}
+          <div className="inline-flex rounded-lg border border-slate-200 bg-slate-100 p-0.5">
+            <button
+              type="button"
+              onClick={() => setViewMode('table')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition ${
+                viewMode === 'table'
+                  ? 'bg-white text-slate-900 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <List className="w-3.5 h-3.5" />
+              <span>Table</span>
+            </button>
+            <button
+              type="button"
+              onClick={() => setViewMode('map')}
+              className={`inline-flex items-center gap-1.5 px-3 py-1.5 rounded-md text-xs font-semibold transition ${
+                viewMode === 'map'
+                  ? 'bg-white text-slate-900 shadow-2xs'
+                  : 'text-slate-600 hover:text-slate-900'
+              }`}
+            >
+              <Map className="w-3.5 h-3.5" />
+              <span>Map View</span>
+            </button>
+          </div>
+
           <button
             type="button"
             onClick={loadComplaints}
@@ -325,6 +357,10 @@ export default function AdminComplaintsPage() {
                 Clear Filters
               </button>
             )}
+          </div>
+        ) : viewMode === 'map' ? (
+          <div className="p-4 sm:p-5">
+            <AdminComplaintsMap complaints={complaints} />
           </div>
         ) : (
           <>

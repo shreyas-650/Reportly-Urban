@@ -66,6 +66,8 @@ export async function fetchAdminComplaints({
         category,
         location,
         ward,
+        latitude,
+        longitude,
         status,
         priority,
         department_id,

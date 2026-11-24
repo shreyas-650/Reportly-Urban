@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import StatusBadge from '../components/common/StatusBadge';
 import ComplaintTimeline from '../components/issues/ComplaintTimeline';
+import ComplaintLocationMap from '../components/maps/ComplaintLocationMap';
 import Button from '../components/common/Button';
 import { useAuth } from '../context/AuthContext';
 import { fetchComplaintDetails } from '../services/complaintService';
@@ -296,6 +297,22 @@ export default function IssueDetailsPage() {
                 </div>
               </div>
             </div>
+          </div>
+
+          {/* Incident Geospatial Location & Navigation */}
+          <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">
+            <h3 className="text-sm font-bold text-slate-900 mb-3 flex items-center gap-2">
+              <MapPin className="w-4 h-4 text-blue-600" />
+              Incident Geospatial Location
+            </h3>
+            <ComplaintLocationMap
+              latitude={complaint.latitude}
+              longitude={complaint.longitude}
+              locationName={complaint.location}
+              ward={complaint.ward}
+              complaintNumber={complaint.complaint_number}
+              showDirections={true}
+            />
           </div>
         </div>
 
