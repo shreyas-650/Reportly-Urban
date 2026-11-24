@@ -14,12 +14,17 @@ import {
   ArrowLeft,
   RefreshCw,
   UserX,
+  Sparkles,
+  Check,
+  CheckCheck,
+  Shield,
 } from 'lucide-react';
 import Button from '../common/Button';
 import LocationPickerMap from '../maps/LocationPickerMap';
 import { ISSUE_CATEGORIES, WARDS } from '../../data/categories';
 import { useAuth } from '../../context/AuthContext';
 import { createComplaint, UUID_V4_REGEX } from '../../services/complaintService';
+import { analyzeIncidentPhoto } from '../../services/aiService';
 
 const PENDING_SUBMISSION_KEY = 'reportly_pending_submission';
 
@@ -123,6 +128,12 @@ export default function ReportForm() {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [createdComplaint, setCreatedComplaint] = useState(null);
 
+  // Phase 5: AI Problem Detection State
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiResult, setAiResult] = useState(null);
+  const [aiError, setAiError] = useState(null);
+  const [overwriteConfirm, setOverwriteConfirm] = useState(null);
+
   // Determine if a pending submission belongs to a different citizen account
   const isAccountMismatch = Boolean(
     pendingSubmission && (!user?.id || user.id !== pendingSubmission.citizenId)
@@ -222,11 +233,83 @@ export default function ReportForm() {
 
     setSelectedFile(null);
     setUploadedStoragePath(null);
+    setAiResult(null);
+    setAiError(null);
+    setOverwriteConfirm(null);
     setFormData((prev) => ({
       ...prev,
       imagePreview: '',
       imageFileName: '',
     }));
+  };
+
+  const handleAnalyzePhoto = async () => {
+    if (!selectedFile || aiLoading || isFormLocked) return;
+
+    setAiLoading(true);
+    setAiError(null);
+    setAiResult(null);
+    setOverwriteConfirm(null);
+
+    const { data, error } = await analyzeIncidentPhoto({ file: selectedFile });
+
+    setAiLoading(false);
+    if (error) {
+      setAiError(error.message);
+    } else if (data) {
+      setAiResult(data);
+    }
+  };
+
+  const handleApplyField = (field, value) => {
+    const currentValue = formData[field] || '';
+    if (currentValue.trim() && currentValue.trim() !== value.trim()) {
+      setOverwriteConfirm({ field, value });
+    } else {
+      setFormData((prev) => ({ ...prev, [field]: value }));
+      setErrors((prev) => ({ ...prev, [field]: null }));
+    }
+  };
+
+  const handleApplyAll = (suggestions) => {
+    if (!suggestions) return;
+    const hasExistingText =
+      (formData.category && formData.category !== suggestions.category) ||
+      (formData.title.trim() && formData.title.trim() !== suggestions.title) ||
+      (formData.description.trim() && formData.description.trim() !== suggestions.description);
+
+    if (hasExistingText) {
+      setOverwriteConfirm({ field: 'all', suggestions });
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        category: suggestions.category,
+        title: suggestions.title,
+        description: suggestions.description,
+      }));
+      setErrors((prev) => ({ ...prev, category: null, title: null, description: null }));
+    }
+  };
+
+  const confirmOverwrite = () => {
+    if (!overwriteConfirm) return;
+    if (overwriteConfirm.field === 'all') {
+      const s = overwriteConfirm.suggestions;
+      setFormData((prev) => ({
+        ...prev,
+        category: s.category,
+        title: s.title,
+        description: s.description,
+      }));
+      setErrors((prev) => ({ ...prev, category: null, title: null, description: null }));
+    } else {
+      setFormData((prev) => ({
+        ...prev,
+        [overwriteConfirm.field]: overwriteConfirm.value,
+      }));
+      setErrors((prev) => ({ ...prev, [overwriteConfirm.field]: null }));
+    }
+    setOverwriteConfirm(null);
   };
 
   const handleFieldChange = (field, value) => {
@@ -402,6 +485,9 @@ export default function ReportForm() {
     });
     setSelectedFile(null);
     setUploadedStoragePath(null);
+    setAiResult(null);
+    setAiError(null);
+    setOverwriteConfirm(null);
     setErrors({});
     setSubmissionError(null);
     setCreatedComplaint(null);
@@ -714,36 +800,247 @@ export default function ReportForm() {
           </label>
 
           {formData.imagePreview || (isFormLocked && uploadedStoragePath) ? (
-            <div className="relative rounded-xl border border-slate-200 overflow-hidden bg-slate-50 p-2 flex items-center gap-4">
-              {formData.imagePreview ? (
-                <img
-                  src={formData.imagePreview}
-                  alt="Selected preview"
-                  className="w-24 h-20 object-cover rounded-lg border border-slate-200"
-                />
-              ) : (
-                <div className="w-24 h-20 rounded-lg border border-slate-200 bg-slate-100 flex items-center justify-center">
-                  <ImageIcon className="w-8 h-8 text-slate-300" />
+            <div className="space-y-3">
+              <div className="relative rounded-xl border border-slate-200 overflow-hidden bg-slate-50 p-2 flex items-center gap-4">
+                {formData.imagePreview ? (
+                  <img
+                    src={formData.imagePreview}
+                    alt="Selected preview"
+                    className="w-24 h-20 object-cover rounded-lg border border-slate-200"
+                  />
+                ) : (
+                  <div className="w-24 h-20 rounded-lg border border-slate-200 bg-slate-100 flex items-center justify-center">
+                    <ImageIcon className="w-8 h-8 text-slate-300" />
+                  </div>
+                )}
+                <div className="flex-1 min-w-0">
+                  <p className="text-xs font-semibold text-slate-800 truncate">
+                    {formData.imageFileName || 'Previously uploaded photograph'}
+                  </p>
+                  <p className="text-[11px] text-emerald-600 mt-0.5">
+                    {uploadedStoragePath ? 'Securely stored — Ready for submission' : 'Ready for upload'}
+                  </p>
                 </div>
-              )}
-              <div className="flex-1 min-w-0">
-                <p className="text-xs font-semibold text-slate-800 truncate">
-                  {formData.imageFileName || 'Previously uploaded photograph'}
-                </p>
-                <p className="text-[11px] text-emerald-600 mt-0.5">
-                  {uploadedStoragePath ? 'Securely stored — Ready for submission' : 'Ready for upload'}
-                </p>
+                {!isFormLocked && (
+                  <button
+                    type="button"
+                    disabled={isSubmitting || aiLoading}
+                    onClick={removeImage}
+                    className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-200 rounded-lg transition-colors mr-2 disabled:opacity-50"
+                    title="Remove photo"
+                  >
+                    <X className="w-4 h-4" />
+                  </button>
+                )}
               </div>
-              {!isFormLocked && (
-                <button
-                  type="button"
-                  disabled={isSubmitting}
-                  onClick={removeImage}
-                  className="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-slate-200 rounded-lg transition-colors mr-2 disabled:opacity-50"
-                  title="Remove photo"
-                >
-                  <X className="w-4 h-4" />
-                </button>
+
+              {/* Phase 5: AI Problem Detection Trigger & Output Panel */}
+              {!isFormLocked && selectedFile && (
+                <div className="rounded-xl border border-blue-200/80 bg-blue-50/40 p-4 space-y-3">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+                    <div className="flex items-center gap-2">
+                      <div className="w-7 h-7 rounded-lg bg-blue-600 text-white flex items-center justify-center shadow-2xs shrink-0">
+                        <Sparkles className="w-4 h-4" />
+                      </div>
+                      <div>
+                        <h4 className="text-xs font-bold text-slate-900">AI Problem Detection (Gemini Vision)</h4>
+                        <p className="text-[11px] text-slate-500">
+                          Automatically detect category, draft issue title, and generate description.
+                        </p>
+                      </div>
+                    </div>
+
+                    {!aiResult && !aiLoading && (
+                      <button
+                        type="button"
+                        onClick={handleAnalyzePhoto}
+                        disabled={aiLoading || isSubmitting}
+                        className="inline-flex items-center justify-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white text-xs font-semibold transition shadow-xs disabled:opacity-50 shrink-0"
+                      >
+                        <Sparkles className="w-3.5 h-3.5" />
+                        <span>Analyze Photo with AI</span>
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Loading State */}
+                  {aiLoading && (
+                    <div className="p-3 bg-white rounded-lg border border-blue-200 text-xs text-blue-900 flex items-center gap-2.5">
+                      <RefreshCw className="w-4 h-4 animate-spin text-blue-600 shrink-0" />
+                      <span>Gemini Vision is analyzing photographic features and municipal defect signatures...</span>
+                    </div>
+                  )}
+
+                  {/* Error State */}
+                  {aiError && (
+                    <div className="p-3 bg-rose-50 rounded-lg border border-rose-200 text-xs text-rose-800 flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-rose-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-semibold">AI Analysis Notice</p>
+                          <p className="text-[11px] text-rose-700 mt-0.5">{aiError}</p>
+                          <p className="text-[10px] text-slate-500 mt-1">Manual grievance reporting remains fully operational below.</p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAiError(null)}
+                        className="text-slate-400 hover:text-slate-600 text-xs"
+                      >
+                        <X className="w-4 h-4" />
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Non-Civic / Low Confidence Result */}
+                  {aiResult && !aiResult.suggestions && (
+                    <div className="p-3.5 bg-amber-50/90 rounded-lg border border-amber-200 text-xs text-amber-900 flex items-start justify-between gap-2">
+                      <div className="flex items-start gap-2">
+                        <AlertCircle className="w-4 h-4 text-amber-600 shrink-0 mt-0.5" />
+                        <div>
+                          <p className="font-bold">No Distinct Civic Defect Detected</p>
+                          <p className="text-[11px] text-amber-800 mt-0.5">
+                            {aiResult.uncertainty_reason || 'The photograph did not show a clear municipal infrastructure issue.'}
+                          </p>
+                          <p className="text-[10px] text-slate-500 mt-1">
+                            You may choose a different photo or continue by filling in the details manually.
+                          </p>
+                        </div>
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setAiResult(null)}
+                        className="text-amber-600 hover:text-amber-800 text-xs font-semibold"
+                      >
+                        Dismiss
+                      </button>
+                    </div>
+                  )}
+
+                  {/* Valid Suggestions Panel */}
+                  {aiResult?.suggestions && (
+                    <div className="bg-white rounded-xl border border-blue-200/90 p-4 shadow-2xs space-y-3 animate-in fade-in duration-200">
+                      <div className="flex items-center justify-between pb-2 border-b border-slate-100">
+                        <div className="flex items-center gap-2">
+                          <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[11px] font-bold bg-blue-50 text-blue-700 border border-blue-200">
+                            <Sparkles className="w-3 h-3 text-blue-600" />
+                            {aiResult.suggestions.detected_issue}
+                          </span>
+                          <span className="text-[11px] text-slate-400 font-medium">
+                            • {Math.round(aiResult.suggestions.confidence * 100)}% AI confidence hint
+                          </span>
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setAiResult(null)}
+                          className="text-slate-400 hover:text-slate-600 text-xs"
+                          title="Dismiss suggestions"
+                        >
+                          <X className="w-4 h-4" />
+                        </button>
+                      </div>
+
+                      {/* Field-by-Field Suggestions with Individual Apply Buttons */}
+                      <div className="space-y-2.5 text-xs">
+                        {/* Category Suggestion */}
+                        <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/80 flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Suggested Category:</span>
+                            <span className="font-semibold text-slate-800 capitalize">
+                              {ISSUE_CATEGORIES.find((c) => c.id === aiResult.suggestions.category)?.name || aiResult.suggestions.category}
+                            </span>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleApplyField('category', aiResult.suggestions.category)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-white hover:bg-blue-50 text-blue-700 font-semibold border border-slate-200 hover:border-blue-300 text-[11px] transition shrink-0"
+                          >
+                            <Check className="w-3 h-3" /> Apply Category
+                          </button>
+                        </div>
+
+                        {/* Title Suggestion */}
+                        <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/80 flex items-center justify-between gap-3">
+                          <div className="min-w-0">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block">Suggested Title:</span>
+                            <p className="font-semibold text-slate-800 text-xs truncate">
+                              "{aiResult.suggestions.title}"
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleApplyField('title', aiResult.suggestions.title)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-white hover:bg-blue-50 text-blue-700 font-semibold border border-slate-200 hover:border-blue-300 text-[11px] transition shrink-0"
+                          >
+                            <Check className="w-3 h-3" /> Apply Title
+                          </button>
+                        </div>
+
+                        {/* Description Suggestion */}
+                        <div className="p-2.5 bg-slate-50 rounded-lg border border-slate-200/80 flex items-start justify-between gap-3">
+                          <div className="min-w-0">
+                            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-0.5">Suggested Description:</span>
+                            <p className="text-slate-700 text-[11px] leading-relaxed">
+                              {aiResult.suggestions.description}
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleApplyField('description', aiResult.suggestions.description)}
+                            className="inline-flex items-center gap-1 px-2.5 py-1 rounded bg-white hover:bg-blue-50 text-blue-700 font-semibold border border-slate-200 hover:border-blue-300 text-[11px] transition shrink-0 mt-0.5"
+                          >
+                            <Check className="w-3 h-3" /> Apply Description
+                          </button>
+                        </div>
+                      </div>
+
+                      {/* Apply All Action */}
+                      <div className="pt-2 border-t border-slate-100 flex items-center justify-between">
+                        <span className="text-[11px] text-slate-500">
+                          Review all suggestions before finalizing your submission.
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => handleApplyAll(aiResult.suggestions)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-blue-600 hover:bg-blue-700 text-white font-semibold text-xs shadow-xs transition"
+                        >
+                          <CheckCheck className="w-3.5 h-3.5" /> Apply All Suggestions
+                        </button>
+                      </div>
+                    </div>
+                  )}
+
+                  {/* Overwrite Confirmation Dialog */}
+                  {overwriteConfirm && (
+                    <div className="p-3 bg-amber-50 rounded-xl border border-amber-300 text-xs text-amber-900 space-y-2">
+                      <div className="font-bold flex items-center gap-1.5">
+                        <AlertCircle className="w-4 h-4 text-amber-600" />
+                        <span>Confirm Overwrite</span>
+                      </div>
+                      <p className="text-[11px] text-amber-800">
+                        {overwriteConfirm.field === 'all'
+                          ? 'Some fields already contain text. Are you sure you want to replace your current text with the AI suggestions?'
+                          : `The ${overwriteConfirm.field} field already contains text. Are you sure you want to replace it with the AI suggestion?`}
+                      </p>
+                      <div className="flex items-center gap-2 pt-1">
+                        <button
+                          type="button"
+                          onClick={confirmOverwrite}
+                          className="px-3 py-1 bg-amber-600 hover:bg-amber-700 text-white font-bold rounded-lg text-xs transition"
+                        >
+                          Yes, Replace
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setOverwriteConfirm(null)}
+                          className="px-3 py-1 bg-white hover:bg-slate-100 text-slate-700 border border-slate-200 font-semibold rounded-lg text-xs transition"
+                        >
+                          Keep My Current Text
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
               )}
             </div>
           ) : (
