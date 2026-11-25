@@ -2,8 +2,10 @@ import React, { useEffect } from 'react';
 import { BrowserRouter, Routes, Route, useLocation } from 'react-router-dom';
 import MainLayout from './layouts/MainLayout';
 import HomePage from './pages/HomePage';
+import AccountabilityDashboardPage from './pages/AccountabilityDashboardPage';
 import ReportIssuePage from './pages/ReportIssuePage';
 import ExploreIssuesPage from './pages/ExploreIssuesPage';
+import PublicComplaintDetailsPage from './pages/PublicComplaintDetailsPage';
 import IssueDetailsPage from './pages/IssueDetailsPage';
 import CitizenDashboard from './pages/CitizenDashboard';
 import AccessDeniedPage from './pages/AccessDeniedPage';
@@ -37,17 +39,26 @@ export default function App() {
             <Route path="/" element={<MainLayout />}>
               {/* Public Routes */}
               <Route index element={<HomePage />} />
+              <Route path="accountability" element={<AccountabilityDashboardPage />} />
               <Route path="report" element={<ReportIssuePage />} />
               <Route path="issues" element={<ExploreIssuesPage />} />
-              <Route path="issues/:id" element={<IssueDetailsPage />} />
+              <Route path="issues/:reference" element={<PublicComplaintDetailsPage />} />
               <Route path="access-denied" element={<AccessDeniedPage />} />
 
-              {/* Protected Citizen Route */}
+              {/* Protected Citizen Routes */}
               <Route
                 path="dashboard"
                 element={
                   <ProtectedRoute allowedRoles={['citizen', 'admin']}>
                     <CitizenDashboard />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="dashboard/issues/:id"
+                element={
+                  <ProtectedRoute allowedRoles={['citizen', 'admin']}>
+                    <IssueDetailsPage />
                   </ProtectedRoute>
                 }
               />

@@ -29,6 +29,7 @@ export default function Navbar() {
 
   const navLinks = [
     { label: 'Home', path: '/' },
+    { label: 'Accountability', path: '/accountability' },
     { label: 'Explore Issues', path: '/issues' },
     { label: 'Citizen Dashboard', path: '/dashboard' },
   ];

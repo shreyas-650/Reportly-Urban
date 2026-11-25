@@ -42,7 +42,14 @@ class Settings(BaseModel):
         if origin.strip()
     ]
     
-    # API Timeouts
+    # API Timeouts & Runtime Environment
+    ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
     GEMINI_TIMEOUT_SECONDS: float = float(os.getenv("GEMINI_TIMEOUT_SECONDS", "15.0"))
+
+    # Phase 6 Public Accountability API Configuration
+    PUBLIC_RPC_TIMEOUT_SECONDS: float = float(os.getenv("PUBLIC_RPC_TIMEOUT_SECONDS", "10.0"))
+    PUBLIC_RATE_LIMIT_PER_MINUTE: int = int(os.getenv("PUBLIC_RATE_LIMIT_PER_MINUTE", "60"))
+    TRUSTED_PROXY_HOPS: int = int(os.getenv("TRUSTED_PROXY_HOPS", "0"))
+    PUBLIC_CACHE_MAX_ENTRIES: int = int(os.getenv("PUBLIC_CACHE_MAX_ENTRIES", "512"))
 
 settings = Settings()

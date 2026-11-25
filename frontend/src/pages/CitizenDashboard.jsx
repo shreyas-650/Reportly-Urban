@@ -279,7 +279,7 @@ export default function CitizenDashboard() {
                 </div>
 
                 <div className="flex items-center gap-2 w-full sm:w-auto justify-end">
-                  <Link to={`/issues/${item.complaint_number || item.id}`} className="w-full sm:w-auto">
+                  <Link to={`/dashboard/issues/${item.complaint_number || item.id}`} className="w-full sm:w-auto">
                     <Button variant="outline" size="sm" className="w-full sm:w-auto">
                       View Audit Trail <ArrowRight className="w-3 h-3 ml-1" />
                     </Button>

@@ -40,6 +40,11 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
+                <Link to="/accountability" className="hover:text-blue-400 transition-colors">
+                  Public Accountability
+                </Link>
+              </li>
+              <li>
                 <Link to="/report" className="hover:text-blue-400 transition-colors">
                   Submit Grievance
                 </Link>
