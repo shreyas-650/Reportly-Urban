@@ -204,7 +204,7 @@ async def get_public_map_points(
             "points": [sanitize_public_item(pt) for pt in raw_points],
             "truncated": bool(data.get("truncated", False)),
             "total_count": data.get("total_count"),
-            "unmapped_count": int(data.get("unmapped_count", 0)),
+            "unmapped_count": int(data.get("unmapped_count") or 0),
             "count_suppressed": bool(data.get("count_suppressed", False)),
         }
 

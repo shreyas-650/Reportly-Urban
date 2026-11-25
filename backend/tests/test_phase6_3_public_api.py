@@ -424,6 +424,22 @@ class Phase63PublicEndpointTests(unittest.TestCase):
         self.assertEqual(r61.status_code, 429)
         self.assertIn("Retry-After", r61.headers)
 
+    @patch("app.services.public_service._call_public_rpc", new_callable=AsyncMock)
+    def test_map_points_null_unmapped_count_suppressed_returns_zero(self, mock_rpc):
+        mock_rpc.return_value = {
+            "points": [make_sample_item()],
+            "truncated": False,
+            "total_count": None,
+            "unmapped_count": None,
+            "count_suppressed": True,
+        }
+        res = self.client.get("/api/public/map-points?ward=Ward+7&category=potholes")
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertEqual(body["unmapped_count"], 0)
+        self.assertIsNone(body["total_count"])
+        self.assertTrue(body["count_suppressed"])
+
 
 if __name__ == "__main__":
     unittest.main()
