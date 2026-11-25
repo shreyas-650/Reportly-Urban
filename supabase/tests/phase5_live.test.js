@@ -442,34 +442,80 @@ try {
   });
 
   await liveTest('Live Backend HTTP (staff): Officer and Admin JWTs rejected with HTTP 403', async () => {
-    const offEmail = process.env.TEST_OFFICER_EMAIL;
-    const offPass = process.env.TEST_OFFICER_PASSWORD;
     const admEmail = process.env.TEST_ADMIN_EMAIL;
     const admPass = process.env.TEST_ADMIN_PASSWORD;
+    let offEmail = process.env.TEST_OFFICER_EMAIL;
+    let offPass = process.env.TEST_OFFICER_PASSWORD;
 
-    if (!offEmail || !offPass || !admEmail || !admPass) {
+    if (!admEmail || !admPass) {
       blockTest(
-        'TEST_OFFICER_EMAIL/PASSWORD and TEST_ADMIN_EMAIL/PASSWORD are not set. In ReportlyUrban, provision_admin_user() is a PostgreSQL PROCEDURE (not PostgREST RPC-callable) and profiles direct UPDATE is revoked from service_role.'
+        'TEST_ADMIN_EMAIL and TEST_ADMIN_PASSWORD are not set in environment; skipping live staff HTTP 403 checks.'
       );
     }
 
-    for (const [roleLabel, email, password] of [
-      ['officer', offEmail, offPass],
-      ['admin', admEmail, admPass],
-    ]) {
-      const roleClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false } });
-      const { data: signInData, error: signErr } = await roleClient.auth.signInWithPassword({ email, password });
-      assert.equal(signErr, null, `${roleLabel} sign-in failed: ${signErr?.message}`);
-      const dummyImg = new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])], { type: 'image/jpeg' });
-      const form = new FormData();
-      form.append('file', dummyImg, 'test.jpg');
-      const res = await fetch(`${TEST_BACKEND_URL}/api/ai/analyze-issue`, {
-        method: 'POST',
-        headers: { Authorization: `Bearer ${signInData.session.access_token}` },
-        body: form,
+    // 1. Sign in with Admin account & verify Admin JWT -> HTTP 403
+    const admClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false } });
+    const { data: admSignIn, error: admErr } = await admClient.auth.signInWithPassword({
+      email: admEmail,
+      password: admPass,
+    });
+    assert.equal(admErr, null, `Admin sign-in failed: ${admErr?.message}`);
+    assert.ok(admSignIn?.session?.access_token, 'Admin access token missing');
+
+    const dummyImg = new Blob([new Uint8Array([0xff, 0xd8, 0xff, 0xe0])], { type: 'image/jpeg' });
+    const admForm = new FormData();
+    admForm.append('file', dummyImg, 'test.jpg');
+    const admRes = await fetch(`${TEST_BACKEND_URL}/api/ai/analyze-issue`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${admSignIn.session.access_token}` },
+      body: admForm,
+    });
+    assert.equal(admRes.status, 403, `Expected HTTP 403 for admin, got ${admRes.status}`);
+
+    // 2. Obtain or provision disposable Officer account & verify Officer JWT -> HTTP 403
+    if (!offEmail || !offPass) {
+      offEmail = `test_off_p5_${runId}@reportly.urban`;
+      offPass = testPassword;
+      const { error: offSignUpErr } = await anonClient.auth.signUp({
+        email: offEmail,
+        password: offPass,
+        options: { data: { full_name: `Phase5 Test Officer ${runId}`, ward: 'Ward 5' } },
       });
-      assert.equal(res.status, 403, `Expected HTTP 403 for ${roleLabel}, got ${res.status}`);
+      assert.equal(offSignUpErr, null, `Officer base signup failed: ${offSignUpErr?.message}`);
+
+      const { data: depts, error: deptErr } = await admClient
+        .from('departments')
+        .select('id')
+        .eq('is_active', true)
+        .limit(1);
+      assert.equal(deptErr, null, `Departments lookup failed: ${deptErr?.message}`);
+      assert.ok(depts && depts.length > 0, 'No active department found for officer linking');
+
+      const { error: linkErr } = await admClient.rpc('link_officer_user', {
+        p_user_email: offEmail,
+        p_department_id: depts[0].id,
+        p_official_name: `Phase5 Test Officer ${runId}`,
+        p_designation: 'Field Inspector',
+      });
+      assert.equal(linkErr, null, `link_officer_user failed: ${linkErr?.message}`);
     }
+
+    const offClient = createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: false } });
+    const { data: offSignIn, error: offErr } = await offClient.auth.signInWithPassword({
+      email: offEmail,
+      password: offPass,
+    });
+    assert.equal(offErr, null, `Officer sign-in failed: ${offErr?.message}`);
+    assert.ok(offSignIn?.session?.access_token, 'Officer access token missing');
+
+    const offForm = new FormData();
+    offForm.append('file', dummyImg, 'test.jpg');
+    const offRes = await fetch(`${TEST_BACKEND_URL}/api/ai/analyze-issue`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${offSignIn.session.access_token}` },
+      body: offForm,
+    });
+    assert.equal(offRes.status, 403, `Expected HTTP 403 for officer, got ${offRes.status}`);
   });
 } finally {
   if (backendProc) {

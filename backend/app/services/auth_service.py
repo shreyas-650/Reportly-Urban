@@ -49,6 +49,7 @@ async def verify_supabase_jwt(token: str) -> Dict[str, Any]:
             algorithms=["ES256"],
             audience="authenticated",
             issuer=expected_issuer,
+            leeway=10,
             options={
                 "verify_signature": True,
                 "verify_exp": True,
