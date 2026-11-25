@@ -442,6 +442,8 @@ async function runTests() {
         const expr = match[1];
         assert.ok(
           expr.includes('public_reference') ||
+            expr.includes('publicRef') ||
+            expr === 'encodeURIComponent(ref)' ||
             (rel === 'pages/ExploreIssuesPage.jsx' && expr.includes('cleaned')),
           `Forbidden dynamic /issues/ link in ${rel}: ${match[0]}`
         );

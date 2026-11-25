@@ -55,6 +55,11 @@ export default function Footer() {
                 </Link>
               </li>
               <li>
+                <Link to="/map" className="hover:text-blue-400 transition-colors">
+                  Public Issue Map
+                </Link>
+              </li>
+              <li>
                 <Link to="/dashboard" className="hover:text-blue-400 transition-colors">
                   My Grievance Dashboard
                 </Link>

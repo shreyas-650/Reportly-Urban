@@ -352,6 +352,36 @@ export async function fetchPublicComplaintDetail(reference, options = {}) {
   return sanitized;
 }
 
+export async function fetchPublicMapPoints(
+  { ward = '', category = '' } = {},
+  options = {}
+) {
+  const query = new URLSearchParams();
+  if (ward && ward.trim()) {
+    query.set('ward', ward.trim().replace(/\s+/g, ' '));
+  }
+  if (category && VALID_PUBLIC_CATEGORIES.includes(category)) {
+    query.set('category', category);
+  }
+  const qs = query.toString();
+  const path = qs ? `/api/public/map-points?${qs}` : '/api/public/map-points';
+
+  const payload = await fetchPublicJson(path, options);
+  const rawPoints = Array.isArray(payload?.points) ? payload.points : [];
+  const points = rawPoints.map(sanitizePublicComplaint).filter(Boolean);
+
+  return {
+    points,
+    truncated: Boolean(payload?.truncated),
+    total_count: payload?.total_count ?? null,
+    unmapped_count:
+      payload?.unmapped_count === null || payload?.unmapped_count === undefined
+        ? null
+        : Number(payload.unmapped_count),
+    count_suppressed: Boolean(payload?.count_suppressed),
+  };
+}
+
 /**
  * Formats avg_resolution_hours using the Phase 6.3 rule:
  * - null/undefined -> "Not enough data"

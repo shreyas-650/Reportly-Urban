@@ -6,6 +6,7 @@ import AccountabilityDashboardPage from './pages/AccountabilityDashboardPage';
 import ReportIssuePage from './pages/ReportIssuePage';
 import ExploreIssuesPage from './pages/ExploreIssuesPage';
 import PublicComplaintDetailsPage from './pages/PublicComplaintDetailsPage';
+import PublicMapPage from './pages/PublicMapPage';
 import IssueDetailsPage from './pages/IssueDetailsPage';
 import CitizenDashboard from './pages/CitizenDashboard';
 import AccessDeniedPage from './pages/AccessDeniedPage';
@@ -43,6 +44,7 @@ export default function App() {
               <Route path="report" element={<ReportIssuePage />} />
               <Route path="issues" element={<ExploreIssuesPage />} />
               <Route path="issues/:reference" element={<PublicComplaintDetailsPage />} />
+              <Route path="map" element={<PublicMapPage />} />
               <Route path="access-denied" element={<AccessDeniedPage />} />
 
               {/* Protected Citizen Routes */}

@@ -1,17 +1,19 @@
 import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
+import { Link, useNavigate, useSearchParams } from 'react-router-dom';
 import {
   AlertCircle,
   AlertTriangle,
   ChevronLeft,
   ChevronRight,
   Info,
+  MapPin,
   RefreshCw,
   Search,
   ShieldCheck,
 } from 'lucide-react';
 import Button from '../components/common/Button';
 import IssueCard from '../components/issues/IssueCard';
+import { buildMapSearchParams } from '../utils/publicMapUtils';
 import {
   PUBLIC_CATEGORY_OPTIONS,
   PUBLIC_PAGE_SIZE,
@@ -200,6 +202,11 @@ export default function ExploreIssuesPage() {
     return str ? `?${str}` : '';
   }, [category, status, ward, page]);
 
+  const viewOnMapUrl = useMemo(() => {
+    const qs = buildMapSearchParams({ ward, category }).toString();
+    return qs ? `/map?${qs}` : '/map';
+  }, [ward, category]);
+
   return (
     <div className="min-h-screen bg-slate-50 py-8 sm:py-10">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 space-y-6">
@@ -371,15 +378,24 @@ export default function ExploreIssuesPage() {
               )}
             </div>
 
-            {hasActiveFilters && (
-              <button
-                type="button"
-                onClick={handleClearFilters}
-                className="text-xs font-semibold text-teal-700 hover:text-teal-800 underline focus:outline-none focus:ring-2 focus:ring-teal-500 rounded cursor-pointer"
+            <div className="flex items-center gap-4">
+              {hasActiveFilters && (
+                <button
+                  type="button"
+                  onClick={handleClearFilters}
+                  className="text-xs font-semibold text-teal-700 hover:text-teal-800 underline focus:outline-none focus:ring-2 focus:ring-teal-500 rounded cursor-pointer"
+                >
+                  Clear filters
+                </button>
+              )}
+              <Link
+                to={viewOnMapUrl}
+                className="inline-flex items-center gap-1 text-xs font-semibold text-slate-800 hover:text-teal-700 underline focus:outline-none focus:ring-2 focus:ring-teal-500 rounded"
               >
-                Clear filters
-              </button>
-            )}
+                <MapPin className="w-3.5 h-3.5" />
+                <span>View on map</span>
+              </Link>
+            </div>
           </div>
         </section>
 

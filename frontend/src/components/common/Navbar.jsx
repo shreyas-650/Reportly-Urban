@@ -31,6 +31,7 @@ export default function Navbar() {
     { label: 'Home', path: '/' },
     { label: 'Accountability', path: '/accountability' },
     { label: 'Explore Issues', path: '/issues' },
+    { label: 'Issue Map', path: '/map' },
     { label: 'Citizen Dashboard', path: '/dashboard' },
   ];
 
