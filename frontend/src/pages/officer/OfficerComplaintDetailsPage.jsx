@@ -14,32 +14,89 @@ import {
   Lock,
   ShieldCheck,
   Upload,
+  Image as ImageIcon,
 } from 'lucide-react';
-import { fetchOfficerComplaintDetail } from '../../services/slaApiService';
+import {
+  fetchOfficerComplaintDetail,
+  registerOfficerResolutionPhoto,
+  resolveOfficerComplaint,
+  uploadOfficerResolutionPhoto,
+} from '../../services/slaApiService';
 import { transitionComplaintStatus, isComplaintOverdue } from '../../services/adminService';
-import { uploadResolutionImage, validateImageFile } from '../../services/storageService';
+import { validateImageFile } from '../../services/storageService';
 import { useAuth } from '../../context/AuthContext';
 import StatusBadge from '../../components/common/StatusBadge';
 import PriorityBadge from '../../components/common/PriorityBadge';
 import ComplaintTimeline from '../../components/issues/ComplaintTimeline';
 import ComplaintLocationMap from '../../components/maps/ComplaintLocationMap';
 
-export default function OfficerComplaintDetailsPage({ fetcher = null }) {
+const INITIAL_PHOTO_STATE = {
+  status: 'idle', // 'idle' | 'uploading' | 'registration_failed' | 'completed' | 'error'
+  fileName: '',
+  previewUrl: '',
+  storagePath: null,
+  width: null,
+  height: null,
+  errorMessage: null,
+};
+
+function createSafePreviewUrl(file) {
+  if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+    try {
+      return URL.createObjectURL(file);
+    } catch {
+      return '';
+    }
+  }
+  return '';
+}
+
+function revokeSafePreviewUrl(url) {
+  if (url && typeof URL !== 'undefined' && typeof URL.revokeObjectURL === 'function') {
+    try {
+      URL.revokeObjectURL(url);
+    } catch {
+      // Ignore cleanup errors
+    }
+  }
+}
+
+export default function OfficerComplaintDetailsPage({ fetcher = null, resolutionApi = null }) {
   const { id } = useParams();
   const { officerRecord } = useAuth();
 
   const [complaint, setComplaint] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+  const [pageNotice, setPageNotice] = useState(null);
 
   const [transitionModalOpen, setTransitionModalOpen] = useState(false);
   const [transitionTarget, setTransitionTarget] = useState(null);
   const [publicDescription, setPublicDescription] = useState('');
-  const [resolutionFile, setResolutionFile] = useState(null);
+  const [photoState, setPhotoState] = useState(INITIAL_PHOTO_STATE);
   const [submitting, setSubmitting] = useState(false);
+  const [timeoutChecking, setTimeoutChecking] = useState(false);
+  const [statusCheckFailed, setStatusCheckFailed] = useState(false);
   const [transitionError, setTransitionError] = useState(null);
 
   const loadDetailFn = fetcher || fetchOfficerComplaintDetail;
+  const uploadPhotoFn = resolutionApi?.uploadPhoto || uploadOfficerResolutionPhoto;
+  const registerPhotoFn = resolutionApi?.registerPhoto || registerOfficerResolutionPhoto;
+  const resolveFn = resolutionApi?.resolveComplaint || resolveOfficerComplaint;
+  const transitionFn = resolutionApi?.transitionComplaint || transitionComplaintStatus;
+
+  const resetPhotoState = useCallback(() => {
+    setPhotoState((prev) => {
+      revokeSafePreviewUrl(prev.previewUrl);
+      return INITIAL_PHOTO_STATE;
+    });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      revokeSafePreviewUrl(photoState.previewUrl);
+    };
+  }, [photoState.previewUrl]);
 
   const loadDetails = useCallback(async () => {
     if (!id) return;
@@ -67,47 +124,204 @@ export default function OfficerComplaintDetailsPage({ fetcher = null }) {
   const handleOpenTransition = (target) => {
     setTransitionTarget(target);
     setPublicDescription('');
-    setResolutionFile(null);
+    resetPhotoState();
     setTransitionError(null);
+    setStatusCheckFailed(false);
+    setTimeoutChecking(false);
+    setPageNotice(null);
     setTransitionModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    if (submitting || timeoutChecking) return;
+    resetPhotoState();
+    setTransitionError(null);
+    setStatusCheckFailed(false);
+    setTransitionModalOpen(false);
+  };
+
+  const handleResolutionFileChange = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file || !complaint) return;
+
+    setTransitionError(null);
+    setStatusCheckFailed(false);
+
+    const validation = validateImageFile(file);
+    if (!validation.valid) {
+      resetPhotoState();
+      setPhotoState({
+        ...INITIAL_PHOTO_STATE,
+        status: 'error',
+        fileName: file.name || '',
+        errorMessage: validation.error,
+      });
+      return;
+    }
+
+    const previewUrl = createSafePreviewUrl(file);
+    setPhotoState((prev) => {
+      revokeSafePreviewUrl(prev.previewUrl);
+      return {
+        status: 'uploading',
+        fileName: file.name || 'completion-photo',
+        previewUrl,
+        storagePath: null,
+        width: null,
+        height: null,
+        errorMessage: null,
+      };
+    });
+
+    try {
+      const uploaded = await uploadPhotoFn(complaint.id, file);
+      setPhotoState((prev) => ({
+        ...prev,
+        status: 'completed',
+        storagePath: uploaded.storage_path,
+        width: uploaded.width || null,
+        height: uploaded.height || null,
+        errorMessage: null,
+      }));
+    } catch (err) {
+      const pendingPath = err?.data?.registration_pending ? err?.data?.storage_path : null;
+      if (pendingPath) {
+        setPhotoState((prev) => ({
+          ...prev,
+          status: 'registration_failed',
+          storagePath: pendingPath,
+          errorMessage:
+            err?.message ||
+            'The photo was uploaded, but saving its completion record failed. Please retry saving the record.',
+        }));
+      } else {
+        setPhotoState((prev) => ({
+          ...prev,
+          status: 'error',
+          storagePath: null,
+          errorMessage: err?.message || 'Unable to verify and upload completion photograph.',
+        }));
+      }
+    }
+  };
+
+  const handleRetryRegistration = async () => {
+    if (!complaint || !photoState.storagePath || photoState.status !== 'registration_failed') return;
+    setTransitionError(null);
+    setPhotoState((prev) => ({ ...prev, status: 'uploading', errorMessage: null }));
+
+    try {
+      const registered = await registerPhotoFn(complaint.id, photoState.storagePath);
+      setPhotoState((prev) => ({
+        ...prev,
+        status: 'completed',
+        storagePath: registered.storage_path,
+        width: registered.width || null,
+        height: registered.height || null,
+        errorMessage: null,
+      }));
+    } catch (err) {
+      setPhotoState((prev) => ({
+        ...prev,
+        status: 'registration_failed',
+        errorMessage:
+          err?.message || 'Still unable to save the completion photo record. Please try again.',
+      }));
+    }
+  };
+
+  const recheckRealStatusAfterTimeout = async () => {
+    if (!id) return;
+    setTimeoutChecking(true);
+    setStatusCheckFailed(false);
+    setTransitionError(null);
+    try {
+      const fresh = await loadDetailFn(id);
+      if (!fresh) {
+        throw new Error('Could not load updated complaint status.');
+      }
+      setComplaint(fresh);
+
+      if (fresh.status === 'resolved') {
+        resetPhotoState();
+        setTransitionModalOpen(false);
+        setPageNotice('Request timed out, and status check confirmed this complaint is already marked resolved.');
+        return;
+      }
+
+      if (fresh.status !== 'in_progress') {
+        setTransitionError(
+          `Request timed out. Real status is now "${fresh.status}", so it can no longer be resolved here.`
+        );
+        return;
+      }
+
+      setTransitionError(
+        'The resolve request timed out. Real status is still "in progress" — you can safely try marking it resolved again.'
+      );
+    } catch {
+      setStatusCheckFailed(true);
+      setTransitionError(
+        'The resolve request timed out and checking the current status failed. Re-check the complaint status before retrying.'
+      );
+    } finally {
+      setTimeoutChecking(false);
+    }
   };
 
   const handleSubmitTransition = async (e) => {
     e.preventDefault();
-    if (!complaint || !transitionTarget || submitting) return;
-    setSubmitting(true);
-    setTransitionError(null);
+    if (!complaint || !transitionTarget || submitting || timeoutChecking) return;
 
-    try {
-      let uploadedPath = null;
-      if (transitionTarget === 'resolved') {
-        if (!publicDescription || publicDescription.trim().length < 10) {
-          throw new Error('A public resolution summary of at least 10 characters is required.');
-        }
-        if (!resolutionFile) {
-          throw new Error('A completion photograph is required to resolve this complaint.');
-        }
-        const validation = validateImageFile(resolutionFile);
-        if (!validation.valid) {
-          throw new Error(validation.error);
-        }
-        const uploadRes = await uploadResolutionImage({
-          file: resolutionFile,
-          complaintId: complaint.id,
-        });
-        if (uploadRes.error) {
-          throw new Error(uploadRes.error.message || 'Failed to upload completion image.');
-        }
-        uploadedPath = uploadRes.data.path;
+    if (transitionTarget === 'resolved') {
+      if (statusCheckFailed) {
+        setTransitionError('Re-check the complaint status before retrying resolution.');
+        return;
+      }
+      if (photoState.status !== 'completed' || !photoState.storagePath) {
+        setTransitionError('Attach and verify a completion photograph before marking resolved.');
+        return;
+      }
+      if (!publicDescription || publicDescription.trim().length < 10) {
+        setTransitionError('A public resolution summary of at least 10 characters is required.');
+        return;
       }
 
-      const { error: rpcErr } = await transitionComplaintStatus({
+      setSubmitting(true);
+      setTransitionError(null);
+      try {
+        await resolveFn(complaint.id, {
+          expectedUpdatedAt: complaint.updated_at,
+          publicDescription: publicDescription.trim(),
+          resolutionImagePath: photoState.storagePath,
+        });
+        resetPhotoState();
+        setTransitionModalOpen(false);
+        setPageNotice('Complaint marked resolved with verified completion photograph.');
+        await loadDetails();
+      } catch (err) {
+        if (err?.isTimeout || err?.name === 'AbortError' || err?.status === 504) {
+          setSubmitting(false);
+          await recheckRealStatusAfterTimeout();
+          return;
+        }
+        setTransitionError(err?.message || 'Failed to mark complaint resolved.');
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    setSubmitting(true);
+    setTransitionError(null);
+    try {
+      const { error: rpcErr } = await transitionFn({
         complaintId: complaint.id,
         newStatus: transitionTarget,
         expectedUpdatedAt: complaint.updated_at,
         publicDescription: publicDescription.trim() || null,
         internalNote: null,
-        resolutionImagePath: uploadedPath,
+        resolutionImagePath: null,
       });
 
       if (rpcErr) {
@@ -185,6 +399,16 @@ export default function OfficerComplaintDetailsPage({ fetcher = null }) {
           )}
         </div>
       </div>
+
+      {pageNotice && (
+        <div
+          role="status"
+          className="p-4 rounded-2xl bg-emerald-50 border border-emerald-200 text-xs font-semibold text-emerald-800 flex items-center gap-2"
+        >
+          <ShieldCheck className="w-4 h-4 text-emerald-600 shrink-0" />
+          <span>{pageNotice}</span>
+        </div>
+      )}
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 items-start">
         <div className="lg:col-span-7 space-y-6">
@@ -333,13 +557,106 @@ export default function OfficerComplaintDetailsPage({ fetcher = null }) {
           >
             <h3 className="text-base font-bold text-slate-900">
               {transitionTarget === 'resolved'
-                ? 'Submit Resolution Evidence'
+                ? 'Submit Verified Completion Photo & Resolve'
                 : 'Commence Fieldwork'}
             </h3>
 
+            {transitionTarget === 'resolved' && (
+              <p className="text-slate-600 leading-relaxed">
+                Attach a completion photograph (JPEG, PNG, or WebP up to 8 MB). Mark Resolved stays disabled until the photo is verified and saved. Location metadata (EXIF/GPS) is removed automatically before storage.
+              </p>
+            )}
+
+            {timeoutChecking && (
+              <div role="status" className="p-3 rounded-xl bg-amber-50 border border-amber-200 text-amber-900 flex items-center gap-2">
+                <RefreshCw className="w-4 h-4 animate-spin shrink-0" />
+                <span>The resolve request timed out. Checking the complaint&apos;s real status before allowing another attempt...</span>
+              </div>
+            )}
+
             {transitionError && (
-              <div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800">
-                {transitionError}
+              <div role="alert" className="p-3 rounded-xl bg-rose-50 border border-rose-200 text-rose-800 space-y-2">
+                <p>{transitionError}</p>
+                {statusCheckFailed && (
+                  <button
+                    type="button"
+                    onClick={recheckRealStatusAfterTimeout}
+                    disabled={timeoutChecking}
+                    className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-rose-700 text-white font-semibold hover:bg-rose-800 disabled:opacity-50"
+                  >
+                    <RefreshCw className="w-3.5 h-3.5" /> Re-check Complaint Status
+                  </button>
+                )}
+              </div>
+            )}
+
+            {transitionTarget === 'resolved' && (
+              <div className="space-y-3">
+                <label htmlFor="officer-proof-file" className="block font-semibold text-slate-700">
+                  Completion Photograph *
+                </label>
+                <div className="border-2 border-dashed border-slate-300 rounded-xl p-4 bg-slate-50 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Upload className="w-4 h-4 text-teal-600 shrink-0" />
+                    <input
+                      id="officer-proof-file"
+                      type="file"
+                      accept="image/jpeg,image/png,image/webp"
+                      disabled={submitting || timeoutChecking || photoState.status === 'uploading'}
+                      onChange={handleResolutionFileChange}
+                      className="w-full"
+                    />
+                  </div>
+
+                  {photoState.previewUrl && (
+                    <img
+                      src={photoState.previewUrl}
+                      alt="Completion photo preview"
+                      className="max-h-40 mx-auto rounded-lg object-contain border border-slate-200 bg-white"
+                    />
+                  )}
+
+                  {!photoState.previewUrl && photoState.fileName && photoState.status !== 'idle' && (
+                    <div className="flex items-center justify-center gap-1.5 text-slate-600">
+                      <ImageIcon className="w-4 h-4 text-slate-400" />
+                      <span>{photoState.fileName}</span>
+                    </div>
+                  )}
+
+                  {photoState.status === 'uploading' && (
+                    <div role="status" className="p-2.5 rounded-lg bg-teal-50 border border-teal-200 text-teal-800 flex items-center gap-2">
+                      <RefreshCw className="w-3.5 h-3.5 animate-spin shrink-0" />
+                      <span>Uploading, verifying image integrity, and removing location metadata...</span>
+                    </div>
+                  )}
+
+                  {photoState.status === 'completed' && (
+                    <div role="status" className="p-2.5 rounded-lg bg-emerald-50 border border-emerald-200 text-emerald-800 flex items-center gap-2 font-semibold">
+                      <Check className="w-3.5 h-3.5 shrink-0" />
+                      <span>Completion photo verified and ready (location metadata removed): {photoState.fileName}</span>
+                    </div>
+                  )}
+
+                  {photoState.status === 'registration_failed' && (
+                    <div role="alert" className="p-3 rounded-lg bg-amber-50 border border-amber-200 text-amber-900 space-y-2">
+                      <p>{photoState.errorMessage}</p>
+                      <button
+                        type="button"
+                        onClick={handleRetryRegistration}
+                        disabled={submitting || timeoutChecking}
+                        className="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-lg bg-amber-700 text-white font-semibold hover:bg-amber-800"
+                      >
+                        <RefreshCw className="w-3.5 h-3.5" /> Retry Saving Photo Record
+                      </button>
+                    </div>
+                  )}
+
+                  {photoState.status === 'error' && photoState.errorMessage && (
+                    <div role="alert" className="p-2.5 rounded-lg bg-rose-50 border border-rose-200 text-rose-800">
+                      {photoState.errorMessage}
+                    </div>
+                  )}
+                </div>
               </div>
             )}
 
@@ -352,43 +669,39 @@ export default function OfficerComplaintDetailsPage({ fetcher = null }) {
                 rows={3}
                 value={publicDescription}
                 onChange={(e) => setPublicDescription(e.target.value)}
+                placeholder={
+                  transitionTarget === 'resolved'
+                    ? 'Describe the repair or work completed (minimum 10 characters)...'
+                    : 'Optional note about starting fieldwork...'
+                }
                 className="w-full px-3 py-2 rounded-xl border border-slate-300 text-slate-900"
               />
             </div>
 
-            {transitionTarget === 'resolved' && (
-              <div>
-                <label htmlFor="officer-proof-file" className="block font-semibold text-slate-700 mb-1">
-                  Completion Photograph *
-                </label>
-                <div className="flex items-center gap-2">
-                  <Upload className="w-4 h-4 text-teal-600" />
-                  <input
-                    id="officer-proof-file"
-                    type="file"
-                    accept="image/jpeg,image/png,image/webp"
-                    onChange={(e) => setResolutionFile(e.target.files?.[0] || null)}
-                    className="w-full"
-                  />
-                </div>
-              </div>
-            )}
-
             <div className="flex justify-end gap-2 pt-2">
               <button
                 type="button"
-                onClick={() => setTransitionModalOpen(false)}
-                disabled={submitting}
-                className="px-3.5 py-2 rounded-xl border border-slate-300 font-semibold text-slate-700"
+                onClick={handleCloseModal}
+                disabled={submitting || timeoutChecking}
+                className="px-3.5 py-2 rounded-xl border border-slate-300 font-semibold text-slate-700 disabled:opacity-50"
               >
                 Cancel
               </button>
               <button
                 type="submit"
-                disabled={submitting}
-                className="px-4 py-2 rounded-xl bg-teal-600 text-white font-semibold hover:bg-teal-700 disabled:opacity-50"
+                disabled={
+                  submitting ||
+                  timeoutChecking ||
+                  statusCheckFailed ||
+                  (transitionTarget === 'resolved' && photoState.status !== 'completed')
+                }
+                className="px-4 py-2 rounded-xl bg-teal-600 text-white font-semibold hover:bg-teal-700 disabled:opacity-50 disabled:cursor-not-allowed"
               >
-                {submitting ? 'Submitting...' : 'Confirm'}
+                {submitting
+                  ? 'Submitting...'
+                  : transitionTarget === 'resolved'
+                  ? 'Mark Resolved'
+                  : 'Confirm'}
               </button>
             </div>
           </form>

@@ -34,7 +34,15 @@ import {
   transitionComplaintStatus,
   isComplaintOverdue,
 } from '../../services/adminService';
-import { uploadResolutionImage, validateImageFile } from '../../services/storageService';
+import { validateImageFile } from '../../services/storageService';
+import {
+  registerAdminResolutionPhoto,
+  registerOfficerResolutionPhoto,
+  resolveAdminComplaint,
+  resolveOfficerComplaint,
+  uploadAdminResolutionPhoto,
+  uploadOfficerResolutionPhoto,
+} from '../../services/slaApiService';
 import { useAuth } from '../../context/AuthContext';
 import StatusBadge from '../../components/common/StatusBadge';
 import PriorityBadge from '../../components/common/PriorityBadge';
@@ -76,6 +84,9 @@ export default function AdminComplaintDetailsPage({ backTo = '/admin/complaints'
   const [internalNote, setInternalNote] = useState('');
   const [resolutionFile, setResolutionFile] = useState(null);
   const [resolutionPreview, setResolutionPreview] = useState(null);
+  const [resolutionUploadedPath, setResolutionUploadedPath] = useState(null);
+  const [resolutionPendingPath, setResolutionPendingPath] = useState(null);
+  const [resolutionUploading, setResolutionUploading] = useState(false);
   const [transitionSubmitting, setTransitionSubmitting] = useState(false);
   const [transitionError, setTransitionError] = useState(null);
   const [transitionSuccess, setTransitionSuccess] = useState(false);
@@ -87,74 +98,115 @@ export default function AdminComplaintDetailsPage({ backTo = '/admin/complaints'
     setInternalNote('');
     setResolutionFile(null);
     setResolutionPreview(null);
+    setResolutionUploadedPath(null);
+    setResolutionPendingPath(null);
+    setResolutionUploading(false);
     setTransitionError(null);
     setConcurrencyAlert(null);
     setTransitionSuccess(false);
     setTransitionModalOpen(true);
   };
 
-  const handleResolutionFileChange = (e) => {
+  const handleResolutionFileChange = async (e) => {
     const file = e.target.files?.[0];
-    if (!file) return;
+    if (!file || !complaint) return;
     const validation = validateImageFile(file);
     if (!validation.valid) {
       setTransitionError(validation.error);
+      setResolutionUploadedPath(null);
+      setResolutionPendingPath(null);
       return;
     }
     setTransitionError(null);
     setResolutionFile(file);
-    setResolutionPreview(URL.createObjectURL(file));
+    setResolutionUploadedPath(null);
+    setResolutionPendingPath(null);
+    if (typeof URL !== 'undefined' && typeof URL.createObjectURL === 'function') {
+      setResolutionPreview(URL.createObjectURL(file));
+    }
+
+    setResolutionUploading(true);
+    try {
+      const uploadFn = isAdmin ? uploadAdminResolutionPhoto : uploadOfficerResolutionPhoto;
+      const uploaded = await uploadFn(complaint.id, file);
+      setResolutionUploadedPath(uploaded.storage_path);
+    } catch (err) {
+      if (err?.data?.registration_pending && err?.data?.storage_path) {
+        setResolutionPendingPath(err.data.storage_path);
+      }
+      setTransitionError(err?.message || 'Failed to upload completion photograph.');
+    } finally {
+      setResolutionUploading(false);
+    }
+  };
+
+  const handleRetryAdminPhotoRegistration = async () => {
+    if (!complaint || !resolutionPendingPath || resolutionUploading) return;
+    setResolutionUploading(true);
+    setTransitionError(null);
+    try {
+      const registerFn = isAdmin ? registerAdminResolutionPhoto : registerOfficerResolutionPhoto;
+      const registered = await registerFn(complaint.id, resolutionPendingPath);
+      setResolutionPendingPath(null);
+      setResolutionUploadedPath(registered.storage_path);
+    } catch (err) {
+      setTransitionError(err?.message || 'Failed to save completion photograph record.');
+    } finally {
+      setResolutionUploading(false);
+    }
   };
 
   const handleSubmitTransition = async (e) => {
     e.preventDefault();
-    if (!complaint || !transitionTarget) return;
+    if (!complaint || !transitionTarget || resolutionUploading) return;
 
     setTransitionSubmitting(true);
     setTransitionError(null);
     setConcurrencyAlert(null);
 
     try {
-      // 1. Validation checks
       if (transitionTarget === 'rejected') {
         if (!publicDescription || publicDescription.trim().length < 5) {
           throw new Error('A detailed public rejection explanation (at least 5 characters) is required.');
         }
       }
 
-      let uploadedPath = null;
       if (transitionTarget === 'resolved') {
         if (!publicDescription || publicDescription.trim().length < 10) {
           throw new Error('A clear public resolution summary (at least 10 characters) is required.');
         }
-        if (!resolutionFile) {
-          throw new Error('A completion evidence photograph is required to resolve this complaint.');
+        if (!resolutionUploadedPath) {
+          throw new Error('A verified completion evidence photograph must finish uploading before resolving.');
         }
 
-        // Upload file to Supabase Storage resolution path
-        const uploadRes = await uploadResolutionImage({
-          file: resolutionFile,
-          complaintId: complaint.id,
+        const resolveFn = isAdmin ? resolveAdminComplaint : resolveOfficerComplaint;
+        await resolveFn(complaint.id, {
+          expectedUpdatedAt: complaint.updated_at,
+          publicDescription: publicDescription.trim(),
+          resolutionImagePath: resolutionUploadedPath,
+          internalNote: internalNote.trim() || null,
         });
 
-        if (uploadRes.error) {
-          throw new Error(`Failed to upload resolution evidence: ${uploadRes.error.message}`);
-        }
-        uploadedPath = uploadRes.data.path;
+        setTransitionSuccess(true);
+        setTimeout(() => {
+          setTransitionModalOpen(false);
+          setTransitionSuccess(false);
+          loadDetails();
+        }, 1000);
+        return;
       }
 
-      // 2. Execute RPC transition
+      // Non-resolved transitions continue via existing RPC
       const { error: rpcError } = await transitionComplaintStatus({
         complaintId: complaint.id,
         newStatus: transitionTarget,
         expectedUpdatedAt: complaint.updated_at,
         publicDescription: publicDescription.trim() || null,
         internalNote: internalNote.trim() || null,
-        resolutionImagePath: uploadedPath,
+        resolutionImagePath: null,
       });
 
       if (rpcError) {
-        // Concurrency conflict check (SQLSTATE 40001)
         if (rpcError.message?.includes('Concurrency Conflict') || rpcError.code === '40001' || rpcError.code === 'P0002') {
           setConcurrencyAlert(
             'Concurrency Conflict: This record was modified by another user or session. Reloading the latest data...'
@@ -175,6 +227,14 @@ export default function AdminComplaintDetailsPage({ backTo = '/admin/complaints'
         loadDetails();
       }, 1000);
     } catch (err) {
+      if (err?.status === 409) {
+        setConcurrencyAlert(err.message || 'Record updated elsewhere. Reloading latest data...');
+        setTimeout(() => {
+          setTransitionModalOpen(false);
+          loadDetails();
+        }, 2000);
+        return;
+      }
       setTransitionError(err instanceof Error ? err.message : String(err));
     } finally {
       setTransitionSubmitting(false);
@@ -1015,11 +1075,32 @@ export default function AdminComplaintDetailsPage({ backTo = '/admin/complaints'
                         <Upload className="w-6 h-6 mx-auto text-slate-400" />
                         <p className="font-semibold text-slate-700">Click to upload completion photo</p>
                         <p className="text-[11px] text-slate-400">
-                          Civic completion proof is verified and displayed to citizens
+                          Civic completion proof is verified and stripped of location metadata before storage
                         </p>
                       </div>
                     )}
                   </div>
+                  {resolutionUploading && (
+                    <p className="text-[11px] text-teal-700 font-semibold mt-2">
+                      Verifying and removing EXIF/GPS metadata...
+                    </p>
+                  )}
+                  {resolutionUploadedPath && !resolutionUploading && (
+                    <p className="text-[11px] text-emerald-700 font-semibold mt-2">
+                      Verified completion photograph saved (metadata removed).
+                    </p>
+                  )}
+                  {resolutionPendingPath && !resolutionUploading && (
+                    <div className="mt-2">
+                      <button
+                        type="button"
+                        onClick={handleRetryAdminPhotoRegistration}
+                        className="px-3 py-1.5 rounded-lg bg-amber-600 text-white font-semibold hover:bg-amber-700"
+                      >
+                        Retry Saving Photo Record
+                      </button>
+                    </div>
+                  )}
                 </div>
               )}
 
@@ -1077,8 +1158,12 @@ export default function AdminComplaintDetailsPage({ backTo = '/admin/complaints'
                 </button>
                 <button
                   type="submit"
-                  disabled={transitionSubmitting}
-                  className={`px-4 py-2 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 ${
+                  disabled={
+                    transitionSubmitting ||
+                    resolutionUploading ||
+                    (transitionTarget === 'resolved' && !resolutionUploadedPath)
+                  }
+                  className={`px-4 py-2 text-white font-bold text-xs rounded-xl shadow-xs transition flex items-center gap-1.5 disabled:opacity-50 disabled:cursor-not-allowed ${
                     transitionTarget === 'resolved'
                       ? 'bg-emerald-600 hover:bg-emerald-700'
                       : transitionTarget === 'rejected'

@@ -153,8 +153,12 @@ async function apiRequest(
       signal: controller.signal,
     };
     if (body !== null && body !== undefined) {
-      headers['Content-Type'] = 'application/json';
-      init.body = JSON.stringify(body);
+      if (typeof FormData !== 'undefined' && body instanceof FormData) {
+        init.body = body;
+      } else {
+        headers['Content-Type'] = 'application/json';
+        init.body = JSON.stringify(body);
+      }
     }
 
     const res = await fetchFn(url, init);
@@ -174,6 +178,8 @@ async function apiRequest(
       }
       const err = new Error(msg);
       err.status = res.status;
+      err.data = data;
+      err.isTimeout = res.status === 504;
       throw err;
     }
 
@@ -182,6 +188,7 @@ async function apiRequest(
     if (err?.name === 'AbortError') {
       const abortErr = new Error('Request timed out or was cancelled.');
       abortErr.name = 'AbortError';
+      abortErr.isTimeout = true;
       throw abortErr;
     }
     throw err;
@@ -294,4 +301,68 @@ export async function fetchCitizenComplaintFollowup(complaintId, options = {}) {
     method: 'GET',
     ...options,
   });
+}
+
+async function _uploadResolutionPhoto(rolePrefix, complaintId, file, options = {}) {
+  const formData = new FormData();
+  formData.append('file', file);
+  return apiRequest(`/api/${rolePrefix}/complaints/${encodeURIComponent(complaintId)}/resolution-photo`, {
+    method: 'POST',
+    body: formData,
+    timeoutMs: 25000,
+    ...options,
+  });
+}
+
+async function _registerResolutionPhoto(rolePrefix, complaintId, storagePath, options = {}) {
+  return apiRequest(`/api/${rolePrefix}/complaints/${encodeURIComponent(complaintId)}/resolution-photo/register`, {
+    method: 'POST',
+    body: { storage_path: storagePath },
+    ...options,
+  });
+}
+
+async function _resolveComplaintWithPhoto(
+  rolePrefix,
+  complaintId,
+  { expectedUpdatedAt, publicDescription, resolutionImagePath, internalNote = null },
+  options = {}
+) {
+  const payload = {
+    expected_updated_at: expectedUpdatedAt,
+    public_description: publicDescription,
+    resolution_image_path: resolutionImagePath,
+  };
+  if (internalNote) {
+    payload.internal_note = internalNote;
+  }
+  return apiRequest(`/api/${rolePrefix}/complaints/${encodeURIComponent(complaintId)}/resolve`, {
+    method: 'POST',
+    body: payload,
+    ...options,
+  });
+}
+
+export function uploadOfficerResolutionPhoto(complaintId, file, options = {}) {
+  return _uploadResolutionPhoto('officer', complaintId, file, options);
+}
+
+export function registerOfficerResolutionPhoto(complaintId, storagePath, options = {}) {
+  return _registerResolutionPhoto('officer', complaintId, storagePath, options);
+}
+
+export function resolveOfficerComplaint(complaintId, payload, options = {}) {
+  return _resolveComplaintWithPhoto('officer', complaintId, payload, options);
+}
+
+export function uploadAdminResolutionPhoto(complaintId, file, options = {}) {
+  return _uploadResolutionPhoto('admin', complaintId, file, options);
+}
+
+export function registerAdminResolutionPhoto(complaintId, storagePath, options = {}) {
+  return _registerResolutionPhoto('admin', complaintId, storagePath, options);
+}
+
+export function resolveAdminComplaint(complaintId, payload, options = {}) {
+  return _resolveComplaintWithPhoto('admin', complaintId, payload, options);
 }

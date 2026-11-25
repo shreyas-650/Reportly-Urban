@@ -225,3 +225,6 @@ Build Reportly Urban as a functional, secure, scalable and maintainable civic te
 Prioritize functionality, reliability, security, user experience, maintainability and visual quality.
 
 **Reportly Urban – Report. Track. Resolve. Verify.**
+
+## Roadmap
+The current phase plan is in docs/ROADMAP.md. Follow it, work one sub-phase at a time, and do not start the next sub-phase without approval.

@@ -4,8 +4,14 @@ All routes enforce Supabase ES256 JWT + active officer role verification from
 public.profiles and public.officers, scoped strictly to the authenticated officer.
 """
 
-from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
 
+from app.schemas.resolution import (
+    RegisterResolutionPhotoRequest,
+    ResolutionPhotoUploadResponse,
+    ResolveComplaintRequest,
+    ResolveComplaintResponse,
+)
 from app.schemas.sla import (
     NotificationReadResponse,
     OfficerComplaintDetailResponse,
@@ -23,6 +29,11 @@ from app.services.phase7_service import (
     list_officer_escalations,
     list_officer_reminders,
     mark_actor_notification_read,
+)
+from app.services.resolution_service import (
+    handle_resolution_photo_upload,
+    resolve_complaint_with_verified_photo,
+    retry_register_resolution_photo,
 )
 
 router = APIRouter(prefix="/api/officer", tags=["Officer Reminders & Notifications"])
@@ -137,5 +148,56 @@ async def get_officer_complaint_detail_endpoint(
     reject_extra_query_params(request, frozenset())
     clean_id = parse_uuid_param(complaint_id, "complaint_id")
     data = await get_officer_complaint_detail(actor, clean_id)
+    response.headers["Cache-Control"] = "no-store"
+    return data
+
+
+@router.post(
+    "/complaints/{complaint_id}/resolution-photo",
+    response_model=ResolutionPhotoUploadResponse,
+)
+async def upload_officer_resolution_photo_endpoint(
+    complaint_id: str,
+    response: Response,
+    file: UploadFile = File(...),
+    actor: AuthenticatedActor = Depends(require_active_officer),
+):
+    clean_id = parse_uuid_param(complaint_id, "complaint_id")
+    result = await handle_resolution_photo_upload(actor, clean_id, file)
+    if isinstance(result, dict):
+        response.headers["Cache-Control"] = "no-store"
+    return result
+
+
+@router.post(
+    "/complaints/{complaint_id}/resolution-photo/register",
+    response_model=ResolutionPhotoUploadResponse,
+)
+async def register_officer_resolution_photo_endpoint(
+    complaint_id: str,
+    payload: RegisterResolutionPhotoRequest,
+    response: Response,
+    actor: AuthenticatedActor = Depends(require_active_officer),
+):
+    clean_id = parse_uuid_param(complaint_id, "complaint_id")
+    data = await retry_register_resolution_photo(actor, clean_id, payload)
+    response.headers["Cache-Control"] = "no-store"
+    return data
+
+
+@router.post(
+    "/complaints/{complaint_id}/resolve",
+    response_model=ResolveComplaintResponse,
+)
+async def resolve_officer_complaint_endpoint(
+    complaint_id: str,
+    payload: ResolveComplaintRequest,
+    response: Response,
+    actor: AuthenticatedActor = Depends(require_active_officer),
+):
+    clean_id = parse_uuid_param(complaint_id, "complaint_id")
+    data = await resolve_complaint_with_verified_photo(
+        actor, clean_id, payload, allow_internal_note=False
+    )
     response.headers["Cache-Control"] = "no-store"
     return data
