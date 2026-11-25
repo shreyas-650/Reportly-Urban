@@ -52,4 +52,10 @@ class Settings(BaseModel):
     TRUSTED_PROXY_HOPS: int = int(os.getenv("TRUSTED_PROXY_HOPS", "0"))
     PUBLIC_CACHE_MAX_ENTRIES: int = int(os.getenv("PUBLIC_CACHE_MAX_ENTRIES", "512"))
 
+    # Phase 7.2 Internal SLA Sweep Configuration
+    SLA_SWEEP_SECRET: str = os.getenv("SLA_SWEEP_SECRET", "")
+    SLA_SWEEP_RATE_LIMIT_PER_MINUTE: int = int(os.getenv("SLA_SWEEP_RATE_LIMIT_PER_MINUTE", "6"))
+    SLA_SWEEP_DEFAULT_BATCH: int = int(os.getenv("SLA_SWEEP_DEFAULT_BATCH", "100"))
+    SLA_SWEEP_TIMEOUT_SECONDS: float = float(os.getenv("SLA_SWEEP_TIMEOUT_SECONDS", "30.0"))
+
 settings = Settings()

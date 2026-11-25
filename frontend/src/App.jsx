@@ -17,6 +17,9 @@ import AdminComplaintsPage from './pages/admin/AdminComplaintsPage';
 import AdminComplaintDetailsPage from './pages/admin/AdminComplaintDetailsPage';
 import AdminDepartmentsPage from './pages/admin/AdminDepartmentsPage';
 import AdminOfficersPage from './pages/admin/AdminOfficersPage';
+import AdminEscalationsPage from './pages/admin/AdminEscalationsPage';
+import AdminSlaRulesPage from './pages/admin/AdminSlaRulesPage';
+import OfficerNotificationsPage from './pages/officer/OfficerNotificationsPage';
 import { ComplaintProvider } from './context/ComplaintContext';
 import { AuthProvider } from './context/AuthContext';
 
@@ -65,19 +68,21 @@ export default function App() {
                 }
               />
 
-              {/* Protected Officer Routes (UI placeholder; full portal in Phase 4) */}
+              {/* Protected Officer Routes */}
               <Route
-                path="officer/*"
+                path="officer"
                 element={
                   <ProtectedRoute allowedRoles={['officer']} requireActiveOfficer={true}>
-                    <div className="max-w-3xl mx-auto py-20 px-4 text-center">
-                      <div className="inline-block px-3 py-1 rounded-full bg-blue-100 text-blue-700 font-semibold text-xs mb-3">
-                        Officer Authorization Confirmed
-                      </div>
-                      <h2 className="text-2xl font-bold text-slate-900">Municipal Officer Workstation</h2>
-                      <p className="text-sm text-slate-600 mt-2">
-                        Your active officer credentials have been verified. Field complaint management will be connected in Phase 4.
-                      </p>
+                    <OfficerNotificationsPage />
+                  </ProtectedRoute>
+                }
+              />
+              <Route
+                path="officer/complaints/:id"
+                element={
+                  <ProtectedRoute allowedRoles={['officer']} requireActiveOfficer={true}>
+                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+                      <AdminComplaintDetailsPage backTo="/officer" />
                     </div>
                   </ProtectedRoute>
                 }
@@ -98,6 +103,8 @@ export default function App() {
               <Route path="complaints/:id" element={<AdminComplaintDetailsPage />} />
               <Route path="departments" element={<AdminDepartmentsPage />} />
               <Route path="officers" element={<AdminOfficersPage />} />
+              <Route path="escalations" element={<AdminEscalationsPage />} />
+              <Route path="sla-rules" element={<AdminSlaRulesPage />} />
             </Route>
 
             {/* 404 Route */}

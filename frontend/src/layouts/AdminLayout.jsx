@@ -6,11 +6,13 @@ import {
   FileText,
   Building,
   Users,
+  Sliders,
   ArrowLeft,
   LogOut,
   ExternalLink,
 } from 'lucide-react';
 import { useAuth } from '../context/AuthContext';
+import NotificationBell from '../components/common/NotificationBell';
 
 export default function AdminLayout() {
   const { citizenInfo, signOut } = useAuth();
@@ -46,6 +48,18 @@ export default function AdminLayout() {
       icon: Users,
       end: false,
     },
+    {
+      to: '/admin/escalations',
+      label: 'Escalations & History',
+      icon: ShieldAlert,
+      end: false,
+    },
+    {
+      to: '/admin/sla-rules',
+      label: 'SLA Rules',
+      icon: Sliders,
+      end: false,
+    },
   ];
 
   return (
@@ -69,6 +83,8 @@ export default function AdminLayout() {
           </div>
 
           <div className="flex items-center gap-4">
+            <NotificationBell role="admin" darkHeader={true} />
+
             <Link
               to="/dashboard"
               className="hidden sm:inline-flex items-center gap-1.5 text-xs text-slate-300 hover:text-white transition-colors py-1.5 px-3 rounded-lg hover:bg-slate-800"

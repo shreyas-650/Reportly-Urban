@@ -41,7 +41,7 @@ import PriorityBadge from '../../components/common/PriorityBadge';
 import ComplaintLocationMap from '../../components/maps/ComplaintLocationMap';
 import { formatDateTime } from '../../utils/formatters';
 
-export default function AdminComplaintDetailsPage() {
+export default function AdminComplaintDetailsPage({ backTo = '/admin/complaints' } = {}) {
   const { id } = useParams();
   const navigate = useNavigate();
 
@@ -313,10 +313,10 @@ export default function AdminComplaintDetailsPage() {
         <AlertCircle className="w-8 h-8 text-rose-500 mx-auto" />
         <h2 className="text-lg font-bold text-slate-900">{error || 'Complaint Not Found'}</h2>
         <Link
-          to="/admin/complaints"
+          to={backTo}
           className="inline-flex items-center gap-1.5 px-4 py-2 bg-blue-600 text-white text-xs font-semibold rounded-lg hover:bg-blue-700 transition"
         >
-          <ArrowLeft className="w-3.5 h-3.5" /> Back to Complaint Queue
+          <ArrowLeft className="w-3.5 h-3.5" /> Back to Queue
         </Link>
       </div>
     );
@@ -329,10 +329,10 @@ export default function AdminComplaintDetailsPage() {
       {/* Top Breadcrumb & Status Bar */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <Link
-          to="/admin/complaints"
+          to={backTo}
           className="inline-flex items-center gap-1.5 text-xs font-semibold text-slate-600 hover:text-slate-900 transition"
         >
-          <ArrowLeft className="w-4 h-4" /> Back to Complaints Queue
+          <ArrowLeft className="w-4 h-4" /> Back to Queue
         </Link>
 
         <div className="flex items-center gap-3">
@@ -728,6 +728,7 @@ export default function AdminComplaintDetailsPage() {
             )}
           </div>
 
+          {isAdmin && (
           <div className="bg-white border border-slate-200 rounded-2xl p-6 shadow-xs space-y-6 sticky top-20">
             <div className="flex items-center justify-between border-b border-slate-100 pb-3">
               <h2 className="text-sm font-bold text-slate-900 uppercase tracking-wider">
@@ -859,6 +860,7 @@ export default function AdminComplaintDetailsPage() {
               </div>
             </form>
           </div>
+          )}
         </div>
       </div>
 

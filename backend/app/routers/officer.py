@@ -1,0 +1,125 @@
+"""
+ReportlyUrban — Phase 7.3 Officer Reminders, Escalations & Notifications Router
+All routes enforce Supabase ES256 JWT + active officer role verification from
+public.profiles and public.officers, scoped strictly to the authenticated officer.
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+
+from app.schemas.sla import (
+    NotificationReadResponse,
+    VALID_NOTIFICATION_KINDS,
+    VALID_REMINDER_KINDS,
+    parse_uuid_param,
+    reject_extra_query_params,
+    validate_bounded_pagination,
+    validate_optional_bool,
+)
+from app.services.auth_service import AuthenticatedActor, require_active_officer
+from app.services.phase7_service import (
+    list_actor_notifications,
+    list_officer_escalations,
+    list_officer_reminders,
+    mark_actor_notification_read,
+)
+
+router = APIRouter(prefix="/api/officer", tags=["Officer Reminders & Notifications"])
+
+
+@router.get("/reminders")
+async def get_officer_reminders_endpoint(
+    request: Request,
+    response: Response,
+    actor: AuthenticatedActor = Depends(require_active_officer),
+):
+    reject_extra_query_params(request, frozenset({"kind", "page", "page_size"}))
+
+    raw_kind = request.query_params.get("kind")
+    kind = None
+    if raw_kind is not None and raw_kind.strip() != "":
+        kind = raw_kind.strip().lower()
+        if kind not in VALID_REMINDER_KINDS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid reminder kind filter.",
+            )
+
+    page, page_size = validate_bounded_pagination(
+        request.query_params.get("page"),
+        request.query_params.get("page_size"),
+        default_size=20,
+        max_size=100,
+    )
+
+    data = await list_officer_reminders(actor, kind=kind, page=page, page_size=page_size)
+    response.headers["Cache-Control"] = "no-store"
+    return data
+
+
+@router.get("/escalations")
+async def get_officer_escalations_endpoint(
+    request: Request,
+    response: Response,
+    actor: AuthenticatedActor = Depends(require_active_officer),
+):
+    reject_extra_query_params(request, frozenset({"page", "page_size"}))
+    page, page_size = validate_bounded_pagination(
+        request.query_params.get("page"),
+        request.query_params.get("page_size"),
+        default_size=20,
+        max_size=100,
+    )
+    data = await list_officer_escalations(actor, page=page, page_size=page_size)
+    response.headers["Cache-Control"] = "no-store"
+    return data
+
+
+@router.get("/notifications")
+async def get_officer_notifications_endpoint(
+    request: Request,
+    response: Response,
+    actor: AuthenticatedActor = Depends(require_active_officer),
+):
+    reject_extra_query_params(
+        request, frozenset({"unread_only", "kind", "page", "page_size"})
+    )
+    unread_only = validate_optional_bool(request.query_params.get("unread_only"), "unread_only")
+    raw_kind = request.query_params.get("kind")
+    kind = None
+    if raw_kind is not None and raw_kind.strip() != "":
+        kind = raw_kind.strip().lower()
+        if kind not in VALID_NOTIFICATION_KINDS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid notification kind filter.",
+            )
+
+    page, page_size = validate_bounded_pagination(
+        request.query_params.get("page"),
+        request.query_params.get("page_size"),
+        default_size=20,
+        max_size=100,
+    )
+
+    data = await list_actor_notifications(
+        actor,
+        unread_only=unread_only,
+        kind=kind,
+        page=page,
+        page_size=page_size,
+        include_reminder_kind=True,
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return data
+
+
+@router.post("/notifications/{notification_id}/read", response_model=NotificationReadResponse)
+async def mark_officer_notification_read_endpoint(
+    notification_id: str,
+    response: Response,
+    actor: AuthenticatedActor = Depends(require_active_officer),
+):
+    clean_id = parse_uuid_param(notification_id, "notification_id")
+    data = await mark_actor_notification_read(actor, clean_id)
+    response.headers["Cache-Control"] = "no-store"
+    return data

@@ -24,23 +24,27 @@ LIST_MAP_CACHE_TTL_SECONDS = 120
 DETAIL_CACHE_TTL_SECONDS = 300
 
 
-def _build_rpc_timeout() -> httpx.Timeout:
+def _build_rpc_timeout(timeout_seconds: Optional[float] = None) -> httpx.Timeout:
     """Builds explicit connect, read, write, and pool timeouts for RPC calls."""
-    t = settings.PUBLIC_RPC_TIMEOUT_SECONDS
+    t = float(timeout_seconds if timeout_seconds is not None else settings.PUBLIC_RPC_TIMEOUT_SECONDS)
     return httpx.Timeout(connect=t, read=t, write=t, pool=t)
 
 
-async def _call_public_rpc(rpc_name: str, payload: Optional[Dict[str, Any]] = None) -> Any:
+async def _call_public_rpc(
+    rpc_name: str,
+    payload: Optional[Dict[str, Any]] = None,
+    timeout_seconds: Optional[float] = None,
+    service_label: str = "Public accountability",
+) -> Any:
     """
-    Executes a read-only Phase 6.2 Supabase PostgreSQL RPC via PostgREST using
-    the backend service-role key and configured timeout. Never exposes raw DB
-    errors, connection strings, or credentials to callers.
+    Executes a Supabase PostgreSQL RPC via PostgREST using the backend service-role key
+    and configured timeout. Never exposes raw DB errors, connection strings, or credentials.
     """
     if not settings.SUPABASE_URL or not settings.SUPABASE_SERVICE_ROLE_KEY:
-        logger.error("Public RPC '%s' failed: Supabase backend configuration missing.", rpc_name)
+        logger.error("RPC '%s' failed: Supabase backend configuration missing.", rpc_name)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Public accountability service is temporarily unavailable.",
+            detail=f"{service_label} service is temporarily unavailable.",
         )
 
     rpc_url = f"{settings.SUPABASE_URL.rstrip('/')}/rest/v1/rpc/{rpc_name}"
@@ -51,34 +55,38 @@ async def _call_public_rpc(rpc_name: str, payload: Optional[Dict[str, Any]] = No
         "Accept": "application/json",
     }
 
+    effective_timeout = (
+        timeout_seconds if timeout_seconds is not None else settings.PUBLIC_RPC_TIMEOUT_SECONDS
+    )
+
     try:
-        async with httpx.AsyncClient(timeout=_build_rpc_timeout()) as client:
+        async with httpx.AsyncClient(timeout=_build_rpc_timeout(effective_timeout)) as client:
             response = await client.post(rpc_url, json=payload or {}, headers=headers)
     except httpx.TimeoutException:
         logger.warning(
-            "Public RPC '%s' timed out after %.1fs.",
+            "RPC '%s' timed out after %.1fs.",
             rpc_name,
-            settings.PUBLIC_RPC_TIMEOUT_SECONDS,
+            effective_timeout,
         )
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Public accountability data request timed out. Please try again shortly.",
+            detail=f"{service_label} request timed out. Please try again shortly.",
         )
     except httpx.RequestError as exc:
-        logger.error("Public RPC '%s' transport error: %s", rpc_name, type(exc).__name__)
+        logger.error("RPC '%s' transport error: %s", rpc_name, type(exc).__name__)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Public accountability service is temporarily unavailable.",
+            detail=f"{service_label} service is temporarily unavailable.",
         )
 
     if response.status_code == 200:
         try:
             return response.json()
         except ValueError:
-            logger.error("Public RPC '%s' returned invalid JSON payload.", rpc_name)
+            logger.error("RPC '%s' returned invalid JSON payload.", rpc_name)
             raise HTTPException(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-                detail="Public accountability service returned an unexpected response.",
+                detail=f"{service_label} service returned an unexpected response.",
             )
 
     # Check structured PostgREST error payload for P0400 parameter validation failure
@@ -97,14 +105,14 @@ async def _call_public_rpc(rpc_name: str, payload: Optional[Dict[str, Any]] = No
             )
 
     logger.error(
-        "Public RPC '%s' failed with upstream status %s (code=%s).",
+        "RPC '%s' failed with upstream status %s (code=%s).",
         rpc_name,
         response.status_code,
         error_code or "unknown",
     )
     raise HTTPException(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-        detail="Public accountability service is temporarily unavailable.",
+        detail=f"{service_label} service is temporarily unavailable.",
     )
 
 

@@ -20,6 +20,7 @@ import ComplaintLocationMap from '../components/maps/ComplaintLocationMap';
 import Button from '../components/common/Button';
 import { useAuth } from '../context/AuthContext';
 import { fetchComplaintDetails } from '../services/complaintService';
+import { fetchCitizenComplaintFollowup } from '../services/slaApiService';
 import { formatDate, formatDateTime, formatStatusLabel } from '../utils/formatters';
 
 const DEFAULT_IMAGE_FALLBACK =
@@ -28,18 +29,20 @@ const DEFAULT_IMAGE_FALLBACK =
 export default function IssueDetailsPage() {
   const { id } = useParams();
   const navigate = useNavigate();
-  const { user, isAuthenticated, loading: authLoading } = useAuth();
+  const { user, role, isAuthenticated, loading: authLoading } = useAuth();
 
   const [complaint, setComplaint] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [copiedShare, setCopiedShare] = useState(false);
+  const [isFollowedUp, setIsFollowedUp] = useState(false);
 
   const loadDetails = useCallback(async () => {
     if (!id) return;
 
     setLoading(true);
     setError(null);
+    setIsFollowedUp(false);
 
     try {
       const result = await fetchComplaintDetails({ identifier: id });
@@ -59,6 +62,30 @@ export default function IssueDetailsPage() {
       setLoading(false);
     }
   }, [id]);
+
+  useEffect(() => {
+    let active = true;
+    async function loadFollowup() {
+      if (role !== 'citizen' || !complaint?.id) {
+        setIsFollowedUp(false);
+        return;
+      }
+      try {
+        const res = await fetchCitizenComplaintFollowup(complaint.id);
+        if (active) {
+          setIsFollowedUp(Boolean(res?.is_followed_up));
+        }
+      } catch {
+        if (active) {
+          setIsFollowedUp(false);
+        }
+      }
+    }
+    loadFollowup();
+    return () => {
+      active = false;
+    };
+  }, [complaint?.id, role]);
 
   useEffect(() => {
     if (!authLoading) {
@@ -335,14 +362,22 @@ export default function IssueDetailsPage() {
           </div>
 
           {/* Civic SLA Notice */}
-          <div className="bg-blue-50/70 border border-blue-200/80 rounded-2xl p-5 text-xs text-blue-900">
-            <h4 className="font-bold flex items-center gap-1.5 mb-1.5 text-blue-950">
+          <div className="bg-blue-50/70 border border-blue-200/80 rounded-2xl p-5 text-xs text-blue-900 space-y-2">
+            <h4 className="font-bold flex items-center gap-1.5 text-blue-950">
               <Clock className="w-4 h-4 text-blue-600" />
               Automated Escalation Policy
             </h4>
             <p className="leading-relaxed text-blue-800">
               Complaints submitted via ReportlyUrban are bound to municipal service level agreements. If triage or field action is delayed, the complaint is automatically flagged for administrative review.
             </p>
+            {isFollowedUp && (
+              <p
+                role="status"
+                className="mt-2 pt-2 border-t border-blue-200 font-semibold text-teal-800"
+              >
+                This complaint is being followed up.
+              </p>
+            )}
           </div>
         </div>
       </div>

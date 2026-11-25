@@ -107,8 +107,19 @@ public_rate_limiter = InProcessSlidingWindowLimiter(
     window_seconds=60,
 )
 
+sweep_rate_limiter = InProcessSlidingWindowLimiter(
+    limit_per_minute=settings.SLA_SWEEP_RATE_LIMIT_PER_MINUTE,
+    window_seconds=60,
+)
+
 
 async def enforce_public_rate_limit(request: Request) -> None:
     """FastAPI dependency executing per-IP rate limiting prior to caching or DB calls."""
     client_ip = extract_client_ip(request, trusted_proxy_hops=settings.TRUSTED_PROXY_HOPS)
     await public_rate_limiter.check_and_record(client_ip)
+
+
+async def enforce_sweep_rate_limit(request: Request) -> None:
+    """Dedicated per-IP rate limiter for POST /api/internal/sla-sweep."""
+    client_ip = extract_client_ip(request, trusted_proxy_hops=settings.TRUSTED_PROXY_HOPS)
+    await sweep_rate_limiter.check_and_record(client_ip)

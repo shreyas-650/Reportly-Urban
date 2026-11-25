@@ -15,6 +15,7 @@ import {
 } from 'lucide-react';
 import Button from './Button';
 import AuthModal from './AuthModal';
+import NotificationBell from './NotificationBell';
 import { useAuth } from '../../context/AuthContext';
 
 export default function Navbar() {
@@ -22,7 +23,7 @@ export default function Navbar() {
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [authModal, setAuthModal] = useState({ isOpen: false, mode: 'login' });
 
-  const { isAuthenticated, citizenInfo, signOut } = useAuth();
+  const { isAuthenticated, citizenInfo, isOfficer, isAdmin, signOut } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
   const dropdownRef = useRef(null);
@@ -119,6 +120,8 @@ export default function Navbar() {
 
             {/* Desktop Action Buttons / Auth State */}
             <div className="hidden md:flex items-center gap-2.5">
+              {isAuthenticated && isOfficer && <NotificationBell role="officer" />}
+              {isAuthenticated && isAdmin && <NotificationBell role="admin" />}
               {isAuthenticated ? (
                 <div className="relative" ref={dropdownRef}>
                   <button
@@ -159,6 +162,26 @@ export default function Navbar() {
                       </div>
 
                       <div className="py-1">
+                        {isOfficer && (
+                          <Link
+                            to="/officer"
+                            onClick={() => setUserDropdownOpen(false)}
+                            className="flex items-center gap-2.5 px-3.5 py-2 text-xs text-teal-700 hover:bg-teal-50 font-semibold transition-colors"
+                          >
+                            <ShieldCheck className="w-4 h-4 text-teal-600" />
+                            Officer Alerts &amp; Reminders
+                          </Link>
+                        )}
+                        {isAdmin && (
+                          <Link
+                            to="/admin"
+                            onClick={() => setUserDropdownOpen(false)}
+                            className="flex items-center gap-2.5 px-3.5 py-2 text-xs text-blue-700 hover:bg-blue-50 font-semibold transition-colors"
+                          >
+                            <ShieldCheck className="w-4 h-4 text-blue-600" />
+                            Municipal Admin Console
+                          </Link>
+                        )}
                         <Link
                           to="/dashboard"
                           onClick={() => setUserDropdownOpen(false)}
