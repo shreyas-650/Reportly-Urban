@@ -289,6 +289,14 @@ export async function markOfficerNotificationRead(notificationId, options = {}) 
   });
 }
 
+export async function fetchOfficerComplaints(params = {}, options = {}) {
+  return apiRequest('/api/officer/complaints', {
+    method: 'GET',
+    query: params,
+    ...options,
+  });
+}
+
 export async function fetchOfficerComplaintDetail(complaintId, options = {}) {
   return apiRequest(`/api/officer/complaints/${encodeURIComponent(complaintId)}`, {
     method: 'GET',
@@ -365,4 +373,68 @@ export function registerAdminResolutionPhoto(complaintId, storagePath, options =
 
 export function resolveAdminComplaint(complaintId, payload, options = {}) {
   return _resolveComplaintWithPhoto('admin', complaintId, payload, options);
+}
+
+export function fetchAdminAiResolutionCheck(complaintId, options = {}) {
+  return apiRequest(
+    `/api/admin/complaints/${encodeURIComponent(complaintId)}/ai-resolution-check`,
+    {
+      method: 'GET',
+      ...options,
+    }
+  );
+}
+
+export function rerunAdminAiResolutionCheck(complaintId, options = {}) {
+  return apiRequest(
+    `/api/admin/complaints/${encodeURIComponent(complaintId)}/ai-resolution-check/rerun`,
+    {
+      method: 'POST',
+      body: {},
+      timeoutMs: 25000,
+      ...options,
+    }
+  );
+}
+
+export function fetchCitizenResolutionVerification(complaintId, options = {}) {
+  return apiRequest(
+    `/api/complaints/${encodeURIComponent(complaintId)}/resolution/verification`,
+    {
+      method: 'GET',
+      ...options,
+    }
+  );
+}
+
+export function submitCitizenVerifyResolution(complaintId, payload = {}, options = {}) {
+  return apiRequest(
+    `/api/complaints/${encodeURIComponent(complaintId)}/resolution/verify`,
+    {
+      method: 'POST',
+      body: payload,
+      ...options,
+    }
+  );
+}
+
+export function submitCitizenDisputeResolution(complaintId, payload, options = {}) {
+  return apiRequest(
+    `/api/complaints/${encodeURIComponent(complaintId)}/resolution/dispute`,
+    {
+      method: 'POST',
+      body: payload,
+      ...options,
+    }
+  );
+}
+
+export function fetchAdminComplaintVerifications(complaintId, options = {}) {
+  return apiRequest(
+    `/api/admin/complaints/${encodeURIComponent(complaintId)}/verifications`,
+    {
+      method: 'GET',
+      ...options,
+    }
+  );
 }

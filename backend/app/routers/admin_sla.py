@@ -3,7 +3,10 @@ ReportlyUrban — Phase 7.3 Admin Escalation, SLA Management & Notifications Rou
 All routes enforce Supabase ES256 JWT + authoritative public.profiles admin role verification.
 """
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Request, Response, UploadFile, status
+
+from app.schemas.ai_resolution import AiResolutionCheckResponse, AiResolutionRerunRequest
+from app.schemas.verification import AdminVerificationHistoryResponse
 
 from app.schemas.resolution import (
     RegisterResolutionPhotoRequest,
@@ -42,6 +45,12 @@ from app.services.resolution_service import (
     resolve_complaint_with_verified_photo,
     retry_register_resolution_photo,
 )
+from app.services.ai_resolution_service import (
+    get_admin_ai_resolution_checks,
+    rerun_admin_ai_resolution_check,
+    schedule_post_resolve_ai_check,
+)
+from app.services.verification_service import get_admin_verification_history
 
 router = APIRouter(prefix="/api/admin", tags=["Admin SLA & Escalations"])
 
@@ -254,6 +263,7 @@ async def register_admin_resolution_photo_endpoint(
 async def resolve_admin_complaint_endpoint(
     complaint_id: str,
     payload: ResolveComplaintRequest,
+    background_tasks: BackgroundTasks,
     response: Response,
     actor: AuthenticatedActor = Depends(require_admin),
 ):
@@ -261,5 +271,57 @@ async def resolve_admin_complaint_endpoint(
     data = await resolve_complaint_with_verified_photo(
         actor, clean_id, payload, allow_internal_note=True
     )
+    schedule_post_resolve_ai_check(background_tasks, clean_id)
+    response.headers["Cache-Control"] = "no-store"
+    return data
+
+
+@router.get(
+    "/complaints/{complaint_id}/ai-resolution-check",
+    response_model=AiResolutionCheckResponse,
+)
+async def get_admin_ai_resolution_check_endpoint(
+    complaint_id: str,
+    request: Request,
+    response: Response,
+    actor: AuthenticatedActor = Depends(require_admin),
+):
+    reject_extra_query_params(request, frozenset())
+    clean_id = parse_uuid_param(complaint_id, "complaint_id")
+    data = await get_admin_ai_resolution_checks(actor, clean_id)
+    response.headers["Cache-Control"] = "no-store"
+    return data
+
+
+@router.post(
+    "/complaints/{complaint_id}/ai-resolution-check/rerun",
+    response_model=AiResolutionCheckResponse,
+)
+async def rerun_admin_ai_resolution_check_endpoint(
+    complaint_id: str,
+    response: Response,
+    payload: AiResolutionRerunRequest = Body(default_factory=AiResolutionRerunRequest),
+    actor: AuthenticatedActor = Depends(require_admin),
+):
+    _ = payload  # Validated with extra='forbid'; no client-controlled values used
+    clean_id = parse_uuid_param(complaint_id, "complaint_id")
+    data = await rerun_admin_ai_resolution_check(actor, clean_id)
+    response.headers["Cache-Control"] = "no-store"
+    return data
+
+
+@router.get(
+    "/complaints/{complaint_id}/verifications",
+    response_model=AdminVerificationHistoryResponse,
+)
+async def get_admin_complaint_verifications_endpoint(
+    complaint_id: str,
+    request: Request,
+    response: Response,
+    actor: AuthenticatedActor = Depends(require_admin),
+):
+    reject_extra_query_params(request, frozenset())
+    clean_id = parse_uuid_param(complaint_id, "complaint_id")
+    data = await get_admin_verification_history(actor, clean_id)
     response.headers["Cache-Control"] = "no-store"
     return data

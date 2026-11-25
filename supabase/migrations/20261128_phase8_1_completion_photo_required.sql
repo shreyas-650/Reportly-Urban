@@ -1,5 +1,5 @@
 -- =============================================================================
--- Migration: 20261125_phase8_1_completion_photo_required.sql
+-- Migration: 20261128_phase8_1_completion_photo_required.sql
 -- Module: Phase 8.1 — Require Verified, Metadata-Stripped Completion Photo
 -- Target: Supabase PostgreSQL
 --

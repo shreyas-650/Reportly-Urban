@@ -506,7 +506,8 @@ class Phase81EndpointsAndAuthorizationTests(unittest.TestCase):
         captured_payload = {}
 
         async def fake_post_admin(client_self, url, **kwargs):
-            captured_payload["json"] = kwargs.get("json")
+            if "/rpc/transition_complaint_status" in url:
+                captured_payload["json"] = kwargs.get("json")
             return _mock_response(204)
 
         with patch("app.services.resolution_service.settings.SUPABASE_URL", "https://example.supabase.co"), \
@@ -564,8 +565,8 @@ class Phase81MigrationStaticIntegrityTests(unittest.TestCase):
     """Static verification of the Phase 8.1 migration & rollback SQL without executing SQL."""
 
     def test_migration_and_rollback_preserve_signature_locks_and_evidence_immutability(self):
-        mig = (REPO_ROOT / "supabase/migrations/20261125_phase8_1_completion_photo_required.sql").read_text(encoding="utf-8")
-        undo = (REPO_ROOT / "supabase/rollbacks/20261125_phase8_1_completion_photo_required_UNDO.sql").read_text(encoding="utf-8")
+        mig = (REPO_ROOT / "supabase/migrations/20261128_phase8_1_completion_photo_required.sql").read_text(encoding="utf-8")
+        undo = (REPO_ROOT / "supabase/rollbacks/20261128_phase8_1_completion_photo_required_UNDO.sql").read_text(encoding="utf-8")
 
         self.assertIn("CREATE OR REPLACE FUNCTION public.transition_complaint_status(", mig)
         self.assertIn("SECURITY DEFINER", mig)

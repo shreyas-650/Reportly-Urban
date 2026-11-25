@@ -46,6 +46,8 @@ import {
 import { useAuth } from '../../context/AuthContext';
 import StatusBadge from '../../components/common/StatusBadge';
 import PriorityBadge from '../../components/common/PriorityBadge';
+import AdminAiResolutionPanel from '../../components/admin/AdminAiResolutionPanel';
+import AdminVerificationHistoryPanel from '../../components/admin/AdminVerificationHistoryPanel';
 import ComplaintLocationMap from '../../components/maps/ComplaintLocationMap';
 import { formatDateTime } from '../../utils/formatters';
 
@@ -672,6 +674,21 @@ export default function AdminComplaintDetailsPage({ backTo = '/admin/complaints'
               )}
             </div>
           </div>
+
+          {isAdmin && (
+            <>
+              <AdminAiResolutionPanel
+                complaintId={complaint.id}
+                complaintStatus={complaint.status}
+                isAdmin={isAdmin}
+              />
+              <AdminVerificationHistoryPanel
+                complaintId={complaint.id}
+                complaintStatus={complaint.status}
+                isAdmin={isAdmin}
+              />
+            </>
+          )}
         </div>
 
         {/* Right Column: Triage & Assignment Workspace */}

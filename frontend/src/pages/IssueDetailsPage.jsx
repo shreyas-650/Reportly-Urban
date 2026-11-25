@@ -16,6 +16,7 @@ import {
 } from 'lucide-react';
 import StatusBadge from '../components/common/StatusBadge';
 import ComplaintTimeline from '../components/issues/ComplaintTimeline';
+import CitizenResolutionVerificationPanel from '../components/issues/CitizenResolutionVerificationPanel';
 import ComplaintLocationMap from '../components/maps/ComplaintLocationMap';
 import Button from '../components/common/Button';
 import { useAuth } from '../context/AuthContext';
@@ -298,6 +299,16 @@ export default function IssueDetailsPage() {
               </p>
             </div>
           </div>
+
+          {role === 'citizen' && complaint?.id && (
+            <CitizenResolutionVerificationPanel
+              complaintId={complaint.id}
+              complaintStatus={complaint.status}
+              beforeImageUrl={complaint.imageUrl}
+              afterImageUrl={complaint.completionImageUrl}
+              onDecisionSubmitted={loadDetails}
+            />
+          )}
 
           {/* Department Responsibility & Priority Card */}
           <div className="bg-white rounded-2xl border border-slate-200 p-6 shadow-xs">

@@ -1,6 +1,6 @@
 -- =============================================================================
--- Rollback: 20261125_phase8_1_completion_photo_required_UNDO.sql
--- Reverts: 20261125_phase8_1_completion_photo_required.sql
+-- Rollback: 20261128_phase8_1_completion_photo_required_UNDO.sql
+-- Reverts: 20261128_phase8_1_completion_photo_required.sql
 -- Target: Supabase PostgreSQL
 --
 -- Purpose:

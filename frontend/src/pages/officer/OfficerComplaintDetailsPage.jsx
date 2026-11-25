@@ -15,6 +15,8 @@ import {
   ShieldCheck,
   Upload,
   Image as ImageIcon,
+  ExternalLink,
+  CheckCircle2,
 } from 'lucide-react';
 import {
   fetchOfficerComplaintDetail,
@@ -454,6 +456,58 @@ export default function OfficerComplaintDetailsPage({ fetcher = null, resolution
                 </span>
               </div>
             </div>
+
+            {/* Problem Photograph */}
+            <div className="space-y-2 text-xs pt-2 border-t border-slate-100">
+              <span className="font-bold text-slate-700 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                <ImageIcon className="w-3.5 h-3.5 text-teal-600" /> Problem Photograph
+              </span>
+              {complaint.signed_image_url ? (
+                <div className="rounded-xl overflow-hidden border border-slate-200 max-h-96 bg-slate-900 flex items-center justify-center relative">
+                  <img
+                    src={complaint.signed_image_url}
+                    alt="Problem Evidence"
+                    className="max-h-96 w-full object-contain"
+                  />
+                  <a
+                    href={complaint.signed_image_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="absolute bottom-3 right-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-black/70 hover:bg-black text-white text-xs rounded-lg backdrop-blur-xs transition"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" /> Full Resolution
+                  </a>
+                </div>
+              ) : (
+                <div className="p-6 text-center bg-slate-50 rounded-xl border border-dashed border-slate-300 text-slate-500">
+                  No problem photograph attached.
+                </div>
+              )}
+            </div>
+
+            {/* Completion Photograph if available */}
+            {complaint.signed_completion_url && (
+              <div className="space-y-2 text-xs pt-2 border-t border-slate-100">
+                <span className="font-bold text-emerald-700 uppercase tracking-wider text-[11px] flex items-center gap-1.5">
+                  <CheckCircle2 className="w-3.5 h-3.5" /> Completion Photograph
+                </span>
+                <div className="rounded-xl overflow-hidden border border-emerald-200 max-h-96 bg-slate-900 flex items-center justify-center relative">
+                  <img
+                    src={complaint.signed_completion_url}
+                    alt="Completion Evidence"
+                    className="max-h-96 w-full object-contain"
+                  />
+                  <a
+                    href={complaint.signed_completion_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="absolute bottom-3 right-3 inline-flex items-center gap-1.5 px-3 py-1.5 bg-black/70 hover:bg-black text-white text-xs rounded-lg backdrop-blur-xs transition"
+                  >
+                    <ExternalLink className="w-3.5 h-3.5" /> Full Resolution
+                  </a>
+                </div>
+              </div>
+            )}
 
             <ComplaintLocationMap
               latitude={complaint.latitude}

@@ -24,6 +24,9 @@ VALID_REMINDER_KINDS: FrozenSet[str] = frozenset({"pre_deadline", "overdue"})
 VALID_NOTIFICATION_KINDS: FrozenSet[str] = frozenset(
     {"reminder", "escalation", "escalation_blocked", "assignment"}
 )
+VALID_COMPLAINT_STATUSES: FrozenSet[str] = frozenset(
+    {"submitted", "under_review", "in_progress", "resolved", "rejected"}
+)
 
 
 def parse_uuid_param(raw_value: str, label: str = "identifier") -> str:
@@ -275,5 +278,30 @@ class OfficerComplaintDetailResponse(BaseModel):
     updated_at: str
     current_level: int = 0
     overdue_marked_at: Optional[str] = None
+    signed_image_url: Optional[str] = None
+    signed_completion_url: Optional[str] = None
     timeline: List[OfficerTimelineStage] = Field(default_factory=list)
     escalations: List[OfficerEscalationSummary] = Field(default_factory=list)
+
+
+class OfficerComplaintListItem(BaseModel):
+    """Strictly allow-listed officer list item; omits citizen PII and raw storage paths."""
+
+    id: str
+    complaint_reference: str
+    title: str
+    category: str
+    ward: str
+    status: str
+    priority: str
+    created_at: str
+    sla_deadline: Optional[str] = None
+    thumbnail_url: Optional[str] = None
+
+
+class OfficerComplaintListResponse(BaseModel):
+    items: List[OfficerComplaintListItem]
+    page: int
+    page_size: int
+    total: int
+    total_pages: int

@@ -103,6 +103,7 @@ app.include_router(internal.router)
 app.include_router(admin_sla.router)
 app.include_router(officer.router)
 app.include_router(citizen.router)
+app.include_router(citizen.complaints_router)
 
 
 @app.exception_handler(Exception)

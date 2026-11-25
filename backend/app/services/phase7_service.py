@@ -5,10 +5,12 @@ tables and SECURITY DEFINER RPCs. Never reads private tables for another user, n
 exposes service_role keys or raw database details.
 """
 
+import asyncio
 from datetime import datetime, timezone
 import logging
 import math
 from typing import Any, Dict, List, Optional, Tuple
+from urllib.parse import quote
 import httpx
 from fastapi import HTTPException, status
 
@@ -19,6 +21,70 @@ from app.services.auth_service import AuthenticatedActor
 logger = logging.getLogger("reportly.phase7.service")
 
 _DEFAULT_TIMEOUT = httpx.Timeout(connect=10.0, read=10.0, write=10.0, pool=10.0)
+_COMPLAINT_BUCKET = "complaint-images"
+
+
+async def _create_signed_complaint_image_url(
+    storage_path: Optional[str],
+    *,
+    expires_in: int = 1800,
+) -> Optional[str]:
+    """
+    Creates a short-lived signed URL for a private complaint-images object.
+    Callers MUST verify actor JWT, role, and complaint assignment before invoking.
+    Never leaks raw storage paths or service credentials on failure.
+    """
+    if not storage_path or not isinstance(storage_path, str):
+        return None
+    clean_path = storage_path.strip()
+    if not clean_path:
+        return None
+    if clean_path.startswith("http://") or clean_path.startswith("https://"):
+        return clean_path
+
+    clean_path = clean_path.lstrip("/")
+    if not clean_path or ".." in clean_path or "\\" in clean_path:
+        return None
+
+    if not settings.SUPABASE_URL or not settings.SUPABASE_SERVICE_ROLE_KEY:
+        return None
+
+    base_url = settings.SUPABASE_URL.rstrip("/")
+    encoded_path = quote(clean_path, safe="/")
+    url = f"{base_url}/storage/v1/object/sign/{_COMPLAINT_BUCKET}/{encoded_path}"
+    headers = {
+        "apikey": settings.SUPABASE_SERVICE_ROLE_KEY,
+        "Authorization": f"Bearer {settings.SUPABASE_SERVICE_ROLE_KEY}",
+        "Content-Type": "application/json",
+        "Accept": "application/json",
+    }
+
+    try:
+        async with httpx.AsyncClient(timeout=_DEFAULT_TIMEOUT) as client:
+            res = await client.post(url, json={"expiresIn": expires_in}, headers=headers)
+    except (httpx.TimeoutException, httpx.RequestError):
+        logger.warning("Timed out or failed reaching storage sign endpoint.")
+        return None
+
+    if res.status_code != 200:
+        logger.warning("Storage sign endpoint returned status=%s", res.status_code)
+        return None
+
+    try:
+        payload = res.json()
+    except ValueError:
+        return None
+
+    signed_rel = payload.get("signedURL") or payload.get("signedUrl") if isinstance(payload, dict) else None
+    if not signed_rel or not isinstance(signed_rel, str):
+        return None
+    if signed_rel.startswith("http://") or signed_rel.startswith("https://"):
+        return signed_rel
+    if signed_rel.startswith("/storage/v1/"):
+        return f"{base_url}{signed_rel}"
+    if signed_rel.startswith("/"):
+        return f"{base_url}/storage/v1{signed_rel}"
+    return f"{base_url}/storage/v1/{signed_rel}"
 
 
 def _auth_headers(token: str, *, count_exact: bool = False) -> Dict[str, str]:
@@ -192,7 +258,7 @@ async def _rest_get(
             status_code=status.HTTP_403_FORBIDDEN,
             detail="You are not authorized to access this resource.",
         )
-    if res.status_code != 200:
+    if res.status_code not in (200, 206):
         logger.warning("PostgREST GET '%s' failed with status=%s", table, res.status_code)
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
@@ -784,9 +850,79 @@ async def list_officer_escalations(
     }
 
 
+async def list_officer_complaints(
+    actor: AuthenticatedActor,
+    *,
+    complaint_status: Optional[str],
+    page: int,
+    page_size: int,
+) -> Dict[str, Any]:
+    if actor.role != "officer" or not actor.officer_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Active municipal officer credentials required.",
+        )
+
+    params: List[Tuple[str, str]] = [
+        ("assigned_officer_id", f"eq.{actor.officer_id}"),
+        (
+            "select",
+            "id,complaint_number,title,category,ward,status,priority,"
+            "sla_deadline,created_at,assigned_officer_id,image_url",
+        ),
+        ("order", "created_at.desc"),
+        ("limit", str(page_size)),
+        ("offset", str((page - 1) * page_size)),
+    ]
+    if complaint_status is not None:
+        params.append(("status", f"eq.{complaint_status}"))
+
+    rows, total = await _rest_get(actor.token, "complaints", params, count_exact=True)
+
+    # Defense-in-depth: never return rows not currently assigned to this officer
+    assigned_rows = [r for r in rows if r.get("assigned_officer_id") == actor.officer_id]
+    thumbnails = await asyncio.gather(
+        *[
+            _create_signed_complaint_image_url(r.get("image_url"), expires_in=900)
+            for r in assigned_rows
+        ]
+    )
+
+    items = [
+        {
+            "id": str(r.get("id")),
+            "complaint_reference": str(r.get("complaint_number") or r.get("id")),
+            "title": str(r.get("title") or ""),
+            "category": str(r.get("category") or ""),
+            "ward": str(r.get("ward") or ""),
+            "status": str(r.get("status") or ""),
+            "priority": str(r.get("priority") or "normal"),
+            "created_at": str(r.get("created_at") or ""),
+            "sla_deadline": r.get("sla_deadline"),
+            "thumbnail_url": thumb_url,
+        }
+        for r, thumb_url in zip(assigned_rows, thumbnails)
+    ]
+
+    total_pages = max(1, math.ceil(total / page_size)) if total > 0 else 1
+    return {
+        "items": items,
+        "page": page,
+        "page_size": page_size,
+        "total": total,
+        "total_pages": total_pages,
+    }
+
+
 async def get_officer_complaint_detail(
     actor: AuthenticatedActor, complaint_id: str
 ) -> Dict[str, Any]:
+    if actor.role != "officer" or not actor.officer_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Active municipal officer credentials required.",
+        )
+
     comp_rows, _ = await _rest_get(
         actor.token,
         "complaints",
@@ -796,18 +932,22 @@ async def get_officer_complaint_detail(
                 "select",
                 "id,complaint_number,title,category,description,location,ward,"
                 "latitude,longitude,status,priority,department_id,assigned_officer_id,"
-                "sla_deadline,created_at,updated_at,"
+                "sla_deadline,created_at,updated_at,image_url,completion_image_url,"
                 "departments(id,name),complaint_sla_state(current_level,overdue_marked_at)",
             ),
         ],
     )
-    if not comp_rows:
+    if not comp_rows or comp_rows[0].get("assigned_officer_id") != actor.officer_id:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail="Complaint not found or access denied.",
         )
 
     comp = comp_rows[0]
+    signed_image_url, signed_completion_url = await asyncio.gather(
+        _create_signed_complaint_image_url(comp.get("image_url"), expires_in=1800),
+        _create_signed_complaint_image_url(comp.get("completion_image_url"), expires_in=1800),
+    )
     dept = comp.get("departments") if isinstance(comp.get("departments"), dict) else {}
     sla_state_raw = comp.get("complaint_sla_state")
     if isinstance(sla_state_raw, list):
@@ -858,6 +998,8 @@ async def get_officer_complaint_detail(
         "updated_at": str(comp.get("updated_at") or ""),
         "current_level": int(sla_state.get("current_level", 0) or 0),
         "overdue_marked_at": sla_state.get("overdue_marked_at"),
+        "signed_image_url": signed_image_url,
+        "signed_completion_url": signed_completion_url,
         "timeline": [
             {
                 "id": str(t.get("id")),

@@ -4,7 +4,7 @@ All routes enforce Supabase ES256 JWT + active officer role verification from
 public.profiles and public.officers, scoped strictly to the authenticated officer.
 """
 
-from fastapi import APIRouter, Depends, File, HTTPException, Request, Response, UploadFile, status
+from fastapi import APIRouter, BackgroundTasks, Depends, File, HTTPException, Request, Response, UploadFile, status
 
 from app.schemas.resolution import (
     RegisterResolutionPhotoRequest,
@@ -15,6 +15,8 @@ from app.schemas.resolution import (
 from app.schemas.sla import (
     NotificationReadResponse,
     OfficerComplaintDetailResponse,
+    OfficerComplaintListResponse,
+    VALID_COMPLAINT_STATUSES,
     VALID_NOTIFICATION_KINDS,
     VALID_REMINDER_KINDS,
     parse_uuid_param,
@@ -26,6 +28,7 @@ from app.services.auth_service import AuthenticatedActor, require_active_officer
 from app.services.phase7_service import (
     get_officer_complaint_detail,
     list_actor_notifications,
+    list_officer_complaints,
     list_officer_escalations,
     list_officer_reminders,
     mark_actor_notification_read,
@@ -35,6 +38,7 @@ from app.services.resolution_service import (
     resolve_complaint_with_verified_photo,
     retry_register_resolution_photo,
 )
+from app.services.ai_resolution_service import schedule_post_resolve_ai_check
 
 router = APIRouter(prefix="/api/officer", tags=["Officer Reminders & Notifications"])
 
@@ -138,6 +142,41 @@ async def mark_officer_notification_read_endpoint(
     return data
 
 
+@router.get("/complaints", response_model=OfficerComplaintListResponse)
+async def get_officer_complaints_endpoint(
+    request: Request,
+    response: Response,
+    actor: AuthenticatedActor = Depends(require_active_officer),
+):
+    reject_extra_query_params(request, frozenset({"status", "page", "page_size"}))
+
+    raw_status = request.query_params.get("status")
+    complaint_status = None
+    if raw_status is not None and raw_status.strip() != "":
+        complaint_status = raw_status.strip().lower()
+        if complaint_status not in VALID_COMPLAINT_STATUSES:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid status filter.",
+            )
+
+    page, page_size = validate_bounded_pagination(
+        request.query_params.get("page"),
+        request.query_params.get("page_size"),
+        default_size=20,
+        max_size=100,
+    )
+
+    data = await list_officer_complaints(
+        actor,
+        complaint_status=complaint_status,
+        page=page,
+        page_size=page_size,
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return data
+
+
 @router.get("/complaints/{complaint_id}", response_model=OfficerComplaintDetailResponse)
 async def get_officer_complaint_detail_endpoint(
     complaint_id: str,
@@ -192,6 +231,7 @@ async def register_officer_resolution_photo_endpoint(
 async def resolve_officer_complaint_endpoint(
     complaint_id: str,
     payload: ResolveComplaintRequest,
+    background_tasks: BackgroundTasks,
     response: Response,
     actor: AuthenticatedActor = Depends(require_active_officer),
 ):
@@ -199,5 +239,6 @@ async def resolve_officer_complaint_endpoint(
     data = await resolve_complaint_with_verified_photo(
         actor, clean_id, payload, allow_internal_note=False
     )
+    schedule_post_resolve_ai_check(background_tasks, clean_id)
     response.headers["Cache-Control"] = "no-store"
     return data

@@ -450,3 +450,63 @@ class Phase73BackendTests(unittest.TestCase):
             )
             self.assertEqual(res_spoof.status_code, 403)
 
+    def test_postgrest_206_partial_content_with_content_range_returns_200_and_totals(self):
+        import httpx
+
+        app.dependency_overrides[get_authenticated_actor] = lambda: OFFICER_ACTOR
+
+        def make_http_res(status_code, payload, headers=None):
+            res = MagicMock(spec=httpx.Response)
+            res.status_code = status_code
+            res.json.return_value = payload
+            res.headers = httpx.Headers(headers or {})
+            return res
+
+        notif_row = {
+            "id": NID_1,
+            "complaint_id": CID_1,
+            "kind": "assignment",
+            "title": "Complaint Assigned to You",
+            "message": "Complaint RU-2026-00021 assigned.",
+            "event_key": f"assignment:officer:{CID_1}:abc",
+            "is_read": False,
+            "read_at": None,
+            "created_at": "2026-11-25T11:00:00Z",
+        }
+        comp_row = {
+            "id": CID_1,
+            "complaint_number": "RU-2026-00021",
+            "category": "potholes",
+            "ward": "Ward 1",
+            "status": "in_progress",
+        }
+
+        async def fake_get(url, params=None, headers=None):
+            param_dict = dict(params or [])
+            if url.endswith("/rest/v1/notifications"):
+                # Unread count probe (limit=1) and paged list both return PostgREST 206 with Content-Range
+                if param_dict.get("limit") == "1":
+                    return make_http_res(206, [{"id": NID_1}], {"Content-Range": "0-0/3"})
+                return make_http_res(206, [notif_row], {"Content-Range": "0-1/5"})
+            if url.endswith("/rest/v1/complaints"):
+                return make_http_res(200, [comp_row])
+            return make_http_res(200, [])
+
+        with patch("app.services.phase7_service.settings.SUPABASE_URL", "https://example.supabase.co"), \
+             patch("app.services.phase7_service.settings.SUPABASE_ANON_KEY", "anon-key"), \
+             patch("app.services.phase7_service.httpx.AsyncClient") as mock_http_cls:
+            mock_client = AsyncMock()
+            mock_client.get.side_effect = fake_get
+            mock_http_cls.return_value.__aenter__.return_value = mock_client
+
+            res = self.client.get("/api/officer/notifications?page=1&page_size=2")
+
+        self.assertEqual(res.status_code, 200)
+        body = res.json()
+        self.assertEqual(body["total"], 5)
+        self.assertEqual(body["total_pages"], 3)
+        self.assertEqual(body["unread_count"], 3)
+        self.assertEqual(len(body["items"]), 1)
+        self.assertEqual(body["items"][0]["id"], NID_1)
+        self.assertEqual(body["items"][0]["complaint_reference"], "RU-2026-00021")
+

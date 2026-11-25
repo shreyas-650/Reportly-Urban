@@ -5,8 +5,8 @@ Loads configuration from environment variables with safe defaults.
 
 import os
 from pathlib import Path
-from typing import List
-from pydantic import BaseModel
+from typing import List, Optional
+from pydantic import BaseModel, Field
 from dotenv import load_dotenv
 
 _BACKEND_DIR = Path(__file__).resolve().parent.parent
@@ -17,10 +17,39 @@ load_dotenv(_BACKEND_DIR / ".env")
 load_dotenv(_REPO_ROOT / ".env")
 load_dotenv(_REPO_ROOT / "frontend" / ".env")
 
+
+def parse_fail_closed_bool(raw_value: Optional[str]) -> bool:
+    """Fail-closed boolean parser: only literal 'true' (case-insensitive) returns True."""
+    if not isinstance(raw_value, str):
+        return False
+    return raw_value.strip().lower() == "true"
+
+
+def _parse_positive_int(raw_value: Optional[str], default: int) -> int:
+    if not raw_value:
+        return default
+    try:
+        val = int(raw_value.strip())
+        return val if val > 0 else default
+    except ValueError:
+        return default
+
+def _strip_env_value(raw_value: Optional[str], default: str = "") -> str:
+    if not isinstance(raw_value, str):
+        return default
+    cleaned = raw_value.strip()
+    if len(cleaned) >= 2 and (
+        (cleaned[0] == '"' and cleaned[-1] == '"')
+        or (cleaned[0] == "'" and cleaned[-1] == "'")
+    ):
+        cleaned = cleaned[1:-1].strip()
+    return cleaned or default
+
+
 class Settings(BaseModel):
     # Gemini Configuration
-    GEMINI_API_KEY: str = os.getenv("GEMINI_API_KEY", "")
-    GEMINI_MODEL: str = os.getenv("GEMINI_MODEL", "gemini-2.5-flash")
+    GEMINI_API_KEY: str = _strip_env_value(os.getenv("GEMINI_API_KEY"), "")
+    GEMINI_MODEL: str = _strip_env_value(os.getenv("GEMINI_MODEL"), "gemini-2.5-flash")
     
     # Supabase Configuration
     SUPABASE_URL: str = os.getenv("VITE_SUPABASE_URL") or os.getenv("SUPABASE_URL", "")
@@ -57,5 +86,20 @@ class Settings(BaseModel):
     SLA_SWEEP_RATE_LIMIT_PER_MINUTE: int = int(os.getenv("SLA_SWEEP_RATE_LIMIT_PER_MINUTE", "6"))
     SLA_SWEEP_DEFAULT_BATCH: int = int(os.getenv("SLA_SWEEP_DEFAULT_BATCH", "100"))
     SLA_SWEEP_TIMEOUT_SECONDS: float = float(os.getenv("SLA_SWEEP_TIMEOUT_SECONDS", "30.0"))
+
+    # Phase 8.2 Advisory AI Before-and-After Resolution Check (fail-closed default False)
+    AI_RESOLUTION_CHECK_ENABLED: bool = Field(
+        default_factory=lambda: parse_fail_closed_bool(os.getenv("AI_RESOLUTION_CHECK_ENABLED"))
+    )
+    AI_RESOLUTION_DAILY_CAP: int = _parse_positive_int(os.getenv("AI_RESOLUTION_DAILY_CAP"), default=200)
+    AI_RESOLUTION_RERUN_PER_USER_PER_MINUTE: int = _parse_positive_int(
+        os.getenv("AI_RESOLUTION_RERUN_PER_USER_PER_MINUTE"), default=6
+    )
+    AI_RESOLUTION_RERUN_GLOBAL_PER_MINUTE: int = _parse_positive_int(
+        os.getenv("AI_RESOLUTION_RERUN_GLOBAL_PER_MINUTE"), default=20
+    )
+    AI_RESOLUTION_PENDING_TIMEOUT_MINUTES: int = _parse_positive_int(
+        os.getenv("AI_RESOLUTION_PENDING_TIMEOUT_MINUTES"), default=5
+    )
 
 settings = Settings()
