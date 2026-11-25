@@ -8,6 +8,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from app.schemas.sla import (
     NotificationReadResponse,
+    OfficerComplaintDetailResponse,
     VALID_NOTIFICATION_KINDS,
     VALID_REMINDER_KINDS,
     parse_uuid_param,
@@ -17,6 +18,7 @@ from app.schemas.sla import (
 )
 from app.services.auth_service import AuthenticatedActor, require_active_officer
 from app.services.phase7_service import (
+    get_officer_complaint_detail,
     list_actor_notifications,
     list_officer_escalations,
     list_officer_reminders,
@@ -121,5 +123,19 @@ async def mark_officer_notification_read_endpoint(
 ):
     clean_id = parse_uuid_param(notification_id, "notification_id")
     data = await mark_actor_notification_read(actor, clean_id)
+    response.headers["Cache-Control"] = "no-store"
+    return data
+
+
+@router.get("/complaints/{complaint_id}", response_model=OfficerComplaintDetailResponse)
+async def get_officer_complaint_detail_endpoint(
+    complaint_id: str,
+    request: Request,
+    response: Response,
+    actor: AuthenticatedActor = Depends(require_active_officer),
+):
+    reject_extra_query_params(request, frozenset())
+    clean_id = parse_uuid_param(complaint_id, "complaint_id")
+    data = await get_officer_complaint_detail(actor, clean_id)
     response.headers["Cache-Control"] = "no-store"
     return data

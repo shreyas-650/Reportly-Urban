@@ -12,6 +12,7 @@ import AdminSlaRulesPage from '../pages/admin/AdminSlaRulesPage';
 import AdminEscalationsPage from '../pages/admin/AdminEscalationsPage';
 import NotificationBell from '../components/common/NotificationBell';
 import OfficerNotificationsPage from '../pages/officer/OfficerNotificationsPage';
+import OfficerComplaintDetailsPage from '../pages/officer/OfficerComplaintDetailsPage';
 import IssueDetailsPage from '../pages/IssueDetailsPage';
 
 // Mock dependencies used by IssueDetailsPage (Leaflet/Supabase/Auth) without altering production code
@@ -465,5 +466,67 @@ describe('Phase 7.3 Unit & Mocked Integration Tests', () => {
 
     await user.click(screen.getByRole('button', { name: /Notifications/i }));
     expect(await screen.findByText('No notifications yet')).toBeInTheDocument();
+  });
+
+  // 9. OfficerComplaintDetailsPage renders sanitized details without internal notes or citizen PII
+  it('renders OfficerComplaintDetailsPage cleanly without admin-only notes or citizen PII and surfaces expired session error', async () => {
+    mockUseAuth.mockReturnValue({
+      officerRecord: { id: 'off-1' },
+    });
+
+    const fetcher = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('Your session has expired or is invalid. Please sign in again.'))
+      .mockResolvedValueOnce({
+        id: 'c-99',
+        complaint_reference: 'RU-2026-00999',
+        title: 'Streetlight failure',
+        category: 'streetlights',
+        description: 'Pole #14 lamp out near junction.',
+        location: 'Main Junction',
+        ward: 'Ward 7',
+        status: 'in_progress',
+        priority: 'high',
+        department_name: 'Electrical',
+        assigned_officer_id: 'off-1',
+        sla_deadline: '2026-11-26T10:00:00Z',
+        created_at: '2026-11-25T05:00:00Z',
+        updated_at: '2026-11-25T06:00:00Z',
+        current_level: 1,
+        timeline: [],
+        escalations: [
+          {
+            id: 'esc-99',
+            from_level: 0,
+            to_level: 1,
+            status: 'completed',
+            reason: 'Assigned officer escalation',
+            triggered_by: 'system',
+            created_at: '2026-11-25T09:00:00Z',
+          },
+        ],
+      });
+
+    const user = userEvent.setup();
+    render(
+      <MemoryRouter initialEntries={['/officer/complaints/c-99']}>
+        <Routes>
+          <Route
+            path="/officer/complaints/:id"
+            element={<OfficerComplaintDetailsPage fetcher={fetcher} />}
+          />
+        </Routes>
+      </MemoryRouter>
+    );
+
+    expect(await screen.findByText(/Your session has expired/i)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /Retry/i }));
+
+    expect(await screen.findByText('RU-2026-00999')).toBeInTheDocument();
+    expect(screen.getByText('Streetlight failure')).toBeInTheDocument();
+    expect(screen.getByText('Assigned officer escalation')).toBeInTheDocument();
+    expect(screen.queryByText(/Triage & Dispatch/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Internal Remark/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Citizen Information/i)).not.toBeInTheDocument();
   });
 });

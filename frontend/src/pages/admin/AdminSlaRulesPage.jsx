@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import {
   Sliders,
   RefreshCw,
@@ -45,6 +45,7 @@ export default function AdminSlaRulesPage({ api = null }) {
   const [successBanner, setSuccessBanner] = useState('');
   const [confirmTarget, setConfirmTarget] = useState(null);
   const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
 
   const loadFn = api?.fetchRules || fetchAdminSlaRules;
   const updateFn = api?.updateRule || updateAdminSlaRule;
@@ -65,6 +66,17 @@ export default function AdminSlaRulesPage({ api = null }) {
   useEffect(() => {
     loadRules();
   }, [loadRules]);
+
+  useEffect(() => {
+    if (!confirmTarget) return undefined;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape' && !savingRef.current) {
+        setConfirmTarget(null);
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [confirmTarget]);
 
   const startEditing = (rule) => {
     setEditingCategory(rule.category);
@@ -104,7 +116,8 @@ export default function AdminSlaRulesPage({ api = null }) {
   };
 
   const handleConfirmSave = async () => {
-    if (!confirmTarget || saving) return;
+    if (!confirmTarget || savingRef.current || saving) return;
+    savingRef.current = true;
     setSaving(true);
     setServerError(null);
 
@@ -126,6 +139,7 @@ export default function AdminSlaRulesPage({ api = null }) {
       setServerError(err?.message || 'Failed to update SLA rule.');
       setConfirmTarget(null);
     } finally {
+      savingRef.current = false;
       setSaving(false);
     }
   };

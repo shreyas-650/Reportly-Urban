@@ -84,3 +84,56 @@ Any external cron runner (GitHub Actions, Render Cron, Cloud Scheduler, etc.) ca
 - **Browser / CORS Isolation:** Cross-origin browser `Origin` requests are rejected (`403`) with zero CORS headers, and all responses emit `Cache-Control: no-store`.
 - **Rate Limiting:** Dedicated per-IP sliding window (`SLA_SWEEP_RATE_LIMIT_PER_MINUTE`, default `6`/minute).
 
+---
+
+## Phase 7.3 & 7.4: Escalations, SLA Management, Notifications & Hardening
+
+### Category SLA Rules & Escalation Hierarchy
+
+- **Categories (`public.category_sla_rules`):** `potholes`, `garbage`, `streetlights`, `water_leakage`, `drainage`, `public_infrastructure`.
+- **Rule Fields:** `sla_hours` (`1..8760`), `reminder_before_hours` (`0 <= x < sla_hours`), `level2_after_hours` (`>= 0`), `level3_after_hours` (`> level2_after_hours`), `updated_at` (used for optimistic concurrency detection).
+- **Escalation Levels:**
+  - **Level 1:** Assigned active field officer (`complaints.assigned_officer_id`)
+  - **Level 2:** Active department head (`public.department_heads` mapping per department)
+  - **Level 3:** Municipal administrator (`public.profiles.role = 'admin'`)
+- **Manual Escalation:** Advances at most `+1` level per step via `public.escalate_complaint_manual`; target level and recipient are always computed server-side from trusted DB state.
+
+### Notification Recipient Model
+
+- **Assignments & Reminders (`public.notifications` & `public.complaint_reminders`):** `pre_deadline` and `overdue` reminders go to the currently assigned officer; assignment notices go to the assigned officer or active department head.
+- **Escalations:** Level 1 -> assigned officer; Level 2 -> active department head; Level 3 & `escalation_blocked` -> all `admin` profiles.
+- **Read State:** Individual notifications can be marked read via `public.mark_notification_read(p_notification_id)`.
+
+### Authenticated FastAPI Endpoints
+
+- **Admin (`role = 'admin'`):**
+  - `GET /api/admin/escalations`, `GET /api/admin/complaints/{complaint_id}/escalations`, `POST /api/admin/complaints/{complaint_id}/escalate`
+  - `GET /api/admin/sla-rules`, `PUT /api/admin/sla-rules/{category}`
+  - `GET /api/admin/notifications`, `POST /api/admin/notifications/{notification_id}/read`
+- **Officer (`role = 'officer'` + active `officers` record):**
+  - `GET /api/officer/reminders`, `GET /api/officer/escalations`, `GET /api/officer/notifications`, `POST /api/officer/notifications/{notification_id}/read`
+  - `GET /api/officer/complaints/{complaint_id}` (sanitized operational detail excluding `internal_note`, `notes`, and citizen contact PII)
+- **Citizen (`role = 'citizen'`, complaint owner only):**
+  - `GET /api/citizen/complaints/{complaint_id}/followup` (returns strictly `{"is_followed_up": bool}`)
+
+### Required Environment Variable Names (Never Commit Values)
+
+- **Backend:** `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`, `GEMINI_API_KEY`, `CORS_ORIGINS`, `ENVIRONMENT`, `SLA_SWEEP_SECRET`, `SLA_SWEEP_RATE_LIMIT_PER_MINUTE`, `SLA_SWEEP_DEFAULT_BATCH`, `SLA_SWEEP_TIMEOUT_SECONDS`
+- **Frontend:** `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, `VITE_MAPBOX_ACCESS_TOKEN`, `VITE_AI_SERVICE_URL`
+
+### Running & Testing Locally
+
+- **Backend API:** `cd backend && .\.venv\Scripts\python.exe -m uvicorn app.main:app --reload --port 8000`
+- **Frontend App:** `cd frontend && npm run dev`
+- **Backend Tests:** `cd backend && .\.venv\Scripts\python.exe -m unittest discover -s tests -v`
+- **Frontend Tests:** `cd frontend && npm test`
+- **Frontend Production Build:** `cd frontend && npm run build`
+- **Sweep Safety Warning:** `supabase/tests/phase7_2_live.test.js` invokes `POST /api/internal/sla-sweep` against the configured database and **must not be run casually** against production or staging datasets unless an explicit sweep test is intended.
+
+### Manual Verification Checklist
+
+- **Admin:** Sign in -> open `/admin/escalations` to filter, inspect per-complaint history, and submit a manual escalation (+1 level); open `/admin/sla-rules` to edit thresholds and confirm the change summary dialog; check header notification bell and mark an alert read.
+- **Officer:** Sign in -> open `/officer` (or navbar bell) to view Pre-Deadline vs Overdue reminders and escalated complaints -> open `/officer/complaints/{id}` to review sanitized progress without admin-only internal notes or citizen contact PII.
+- **Citizen:** Sign in -> open an owned complaint at `/dashboard/issues/{id}` and verify `"This complaint is being followed up."` renders only when follow-up/overdue is active and never exposes internal staff/escalation details.
+
+

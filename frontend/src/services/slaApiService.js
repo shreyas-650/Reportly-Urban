@@ -166,9 +166,12 @@ async function apiRequest(
     }
 
     if (!res.ok) {
-      const msg =
+      let msg =
         (data && typeof data.detail === 'string' && data.detail) ||
         `Request failed with status ${res.status}.`;
+      if (res.status === 401) {
+        msg = 'Your session has expired or is invalid. Please sign in again.';
+      }
       const err = new Error(msg);
       err.status = res.status;
       throw err;
@@ -275,6 +278,13 @@ export async function fetchOfficerNotifications(params = {}, options = {}) {
 export async function markOfficerNotificationRead(notificationId, options = {}) {
   return apiRequest(`/api/officer/notifications/${encodeURIComponent(notificationId)}/read`, {
     method: 'POST',
+    ...options,
+  });
+}
+
+export async function fetchOfficerComplaintDetail(complaintId, options = {}) {
+  return apiRequest(`/api/officer/complaints/${encodeURIComponent(complaintId)}`, {
+    method: 'GET',
     ...options,
   });
 }

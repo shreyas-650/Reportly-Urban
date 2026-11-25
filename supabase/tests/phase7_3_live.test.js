@@ -107,6 +107,7 @@ async function main() {
       ['GET', '/api/officer/reminders'],
       ['GET', '/api/officer/escalations'],
       ['GET', '/api/officer/notifications'],
+      ['GET', '/api/officer/complaints/11111111-1111-4111-8111-111111111111'],
       ['GET', '/api/citizen/complaints/11111111-1111-4111-8111-111111111111/followup'],
     ];
     for (const [method, route] of unauthRoutes) {

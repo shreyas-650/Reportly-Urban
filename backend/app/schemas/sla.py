@@ -229,3 +229,51 @@ class PaginatedResponse(BaseModel):
     page_size: int
     total: int
     total_pages: int
+
+
+class OfficerTimelineStage(BaseModel):
+    id: str
+    status: str
+    stage_title: str
+    public_description: Optional[str] = None
+    created_at: str
+
+
+class OfficerEscalationSummary(BaseModel):
+    id: str
+    from_level: int
+    to_level: int
+    status: str
+    reason: str
+    triggered_by: str
+    created_at: str
+
+
+class OfficerComplaintDetailResponse(BaseModel):
+    """
+    Strictly allow-listed officer view of a complaint.
+    Explicitly omits citizen PII (citizen_id, name, phone, ward), internal_note,
+    legacy notes, actor_id, and admin assignment audit records.
+    """
+
+    id: str
+    complaint_reference: str
+    title: str
+    category: str
+    description: str
+    location: str
+    ward: str
+    latitude: Optional[float] = None
+    longitude: Optional[float] = None
+    status: str
+    priority: str
+    department_id: Optional[str] = None
+    department_name: Optional[str] = None
+    assigned_officer_id: Optional[str] = None
+    sla_deadline: Optional[str] = None
+    created_at: str
+    updated_at: str
+    current_level: int = 0
+    overdue_marked_at: Optional[str] = None
+    timeline: List[OfficerTimelineStage] = Field(default_factory=list)
+    escalations: List[OfficerEscalationSummary] = Field(default_factory=list)

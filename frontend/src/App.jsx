@@ -20,6 +20,7 @@ import AdminOfficersPage from './pages/admin/AdminOfficersPage';
 import AdminEscalationsPage from './pages/admin/AdminEscalationsPage';
 import AdminSlaRulesPage from './pages/admin/AdminSlaRulesPage';
 import OfficerNotificationsPage from './pages/officer/OfficerNotificationsPage';
+import OfficerComplaintDetailsPage from './pages/officer/OfficerComplaintDetailsPage';
 import { ComplaintProvider } from './context/ComplaintContext';
 import { AuthProvider } from './context/AuthContext';
 
@@ -81,9 +82,7 @@ export default function App() {
                 path="officer/complaints/:id"
                 element={
                   <ProtectedRoute allowedRoles={['officer']} requireActiveOfficer={true}>
-                    <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-                      <AdminComplaintDetailsPage backTo="/officer" />
-                    </div>
+                    <OfficerComplaintDetailsPage />
                   </ProtectedRoute>
                 }
               />

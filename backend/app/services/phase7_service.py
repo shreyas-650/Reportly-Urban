@@ -784,6 +784,105 @@ async def list_officer_escalations(
     }
 
 
+async def get_officer_complaint_detail(
+    actor: AuthenticatedActor, complaint_id: str
+) -> Dict[str, Any]:
+    comp_rows, _ = await _rest_get(
+        actor.token,
+        "complaints",
+        [
+            ("id", f"eq.{complaint_id}"),
+            (
+                "select",
+                "id,complaint_number,title,category,description,location,ward,"
+                "latitude,longitude,status,priority,department_id,assigned_officer_id,"
+                "sla_deadline,created_at,updated_at,"
+                "departments(id,name),complaint_sla_state(current_level,overdue_marked_at)",
+            ),
+        ],
+    )
+    if not comp_rows:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Complaint not found or access denied.",
+        )
+
+    comp = comp_rows[0]
+    dept = comp.get("departments") if isinstance(comp.get("departments"), dict) else {}
+    sla_state_raw = comp.get("complaint_sla_state")
+    if isinstance(sla_state_raw, list):
+        sla_state = sla_state_raw[0] if sla_state_raw else {}
+    elif isinstance(sla_state_raw, dict):
+        sla_state = sla_state_raw
+    else:
+        sla_state = {}
+
+    # Read from public_complaint_history security-barrier view (excludes internal_note, notes, actor_id)
+    timeline_rows, _ = await _rest_get(
+        actor.token,
+        "public_complaint_history",
+        [
+            ("complaint_id", f"eq.{complaint_id}"),
+            ("select", "id,status,stage_title,public_description,created_at"),
+            ("order", "created_at.asc"),
+        ],
+    )
+
+    esc_rows, _ = await _rest_get(
+        actor.token,
+        "complaint_escalations",
+        [
+            ("complaint_id", f"eq.{complaint_id}"),
+            ("select", "id,from_level,to_level,status,reason,triggered_by,created_at"),
+            ("order", "created_at.desc"),
+        ],
+    )
+
+    return {
+        "id": str(comp.get("id")),
+        "complaint_reference": str(comp.get("complaint_number") or comp.get("id")),
+        "title": str(comp.get("title") or ""),
+        "category": str(comp.get("category") or ""),
+        "description": str(comp.get("description") or ""),
+        "location": str(comp.get("location") or ""),
+        "ward": str(comp.get("ward") or ""),
+        "latitude": comp.get("latitude"),
+        "longitude": comp.get("longitude"),
+        "status": str(comp.get("status") or ""),
+        "priority": str(comp.get("priority") or "normal"),
+        "department_id": comp.get("department_id"),
+        "department_name": dept.get("name"),
+        "assigned_officer_id": comp.get("assigned_officer_id"),
+        "sla_deadline": comp.get("sla_deadline"),
+        "created_at": str(comp.get("created_at") or ""),
+        "updated_at": str(comp.get("updated_at") or ""),
+        "current_level": int(sla_state.get("current_level", 0) or 0),
+        "overdue_marked_at": sla_state.get("overdue_marked_at"),
+        "timeline": [
+            {
+                "id": str(t.get("id")),
+                "status": str(t.get("status") or ""),
+                "stage_title": str(t.get("stage_title") or ""),
+                "public_description": t.get("public_description"),
+                "created_at": str(t.get("created_at") or ""),
+            }
+            for t in timeline_rows
+        ],
+        "escalations": [
+            {
+                "id": str(e.get("id")),
+                "from_level": int(e.get("from_level", 0) or 0),
+                "to_level": int(e.get("to_level", 0) or 0),
+                "status": str(e.get("status") or ""),
+                "reason": str(e.get("reason") or ""),
+                "triggered_by": str(e.get("triggered_by") or ""),
+                "created_at": str(e.get("created_at") or ""),
+            }
+            for e in esc_rows
+        ],
+    }
+
+
 async def get_citizen_followup_status(actor: AuthenticatedActor, complaint_id: str) -> Dict[str, bool]:
     res = await _rest_rpc(
         actor.token,

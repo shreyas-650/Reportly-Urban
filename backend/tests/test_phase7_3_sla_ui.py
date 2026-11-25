@@ -13,7 +13,7 @@ Covers:
 """
 
 import unittest
-from unittest.mock import AsyncMock, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 from fastapi import HTTPException, status
 from fastapi.testclient import TestClient
 
@@ -65,6 +65,7 @@ class Phase73BackendTests(unittest.TestCase):
             ("GET", "/api/officer/escalations"),
             ("GET", "/api/officer/notifications"),
             ("POST", f"/api/officer/notifications/{NID_1}/read"),
+            ("GET", f"/api/officer/complaints/{CID_1}"),
             ("GET", f"/api/citizen/complaints/{CID_1}/followup"),
         ]
         for method, path in endpoints:
@@ -91,6 +92,7 @@ class Phase73BackendTests(unittest.TestCase):
             ("GET", "/api/officer/escalations", None),
             ("GET", "/api/officer/notifications", None),
             ("POST", f"/api/officer/notifications/{NID_1}/read", None),
+            ("GET", f"/api/officer/complaints/{CID_1}", None),
         ]
         citizen_endpoints = [
             ("GET", f"/api/citizen/complaints/{CID_1}/followup", None),
@@ -328,3 +330,123 @@ class Phase73BackendTests(unittest.TestCase):
         )
         res_denied = self.client.get(f"/api/citizen/complaints/{CID_2}/followup")
         self.assertEqual(res_denied.status_code, 404)
+
+    @patch("app.services.phase7_service._rest_get", new_callable=AsyncMock)
+    def test_officer_complaint_detail_privacy_filter_excludes_admin_notes_and_pii(self, mock_get):
+        app.dependency_overrides[get_authenticated_actor] = lambda: OFFICER_ACTOR
+
+        mock_get.side_effect = [
+            (
+                [
+                    {
+                        "id": CID_1,
+                        "complaint_number": "RU-2026-00055",
+                        "citizen_id": "secret-citizen-uuid",
+                        "citizen": {"full_name": "Jane Citizen", "phone_number": "9999999999"},
+                        "title": "Blocked culvert",
+                        "category": "drainage",
+                        "description": "Stormwater drain clogged.",
+                        "location": "Cross Road 2",
+                        "ward": "Ward 12",
+                        "latitude": 12.97,
+                        "longitude": 77.59,
+                        "status": "in_progress",
+                        "priority": "high",
+                        "department_id": DEPT_1,
+                        "assigned_officer_id": OFF_1,
+                        "sla_deadline": "2026-11-26T10:00:00Z",
+                        "created_at": "2026-11-25T06:00:00Z",
+                        "updated_at": "2026-11-25T07:00:00Z",
+                        "departments": {"id": DEPT_1, "name": "Drainage"},
+                        "complaint_sla_state": {"current_level": 1, "overdue_marked_at": None},
+                    }
+                ],
+                1,
+            ),
+            (
+                [
+                    {
+                        "id": "hist-1",
+                        "status": "in_progress",
+                        "stage_title": "Remediation In Progress",
+                        "public_description": "Crew dispatched.",
+                        "internal_note": "PRIVATE ADMIN NOTE MUST NOT LEAK",
+                        "notes": "LEGACY PRIVATE NOTE",
+                        "actor_id": "admin-secret-id",
+                        "created_at": "2026-11-25T07:00:00Z",
+                    }
+                ],
+                1,
+            ),
+            (
+                [
+                    {
+                        "id": "esc-1",
+                        "from_level": 0,
+                        "to_level": 1,
+                        "status": "completed",
+                        "reason": "Escalated to officer",
+                        "triggered_by": "system",
+                        "triggered_by_profile_id": "secret-admin",
+                        "created_at": "2026-11-25T08:00:00Z",
+                    }
+                ],
+                1,
+            ),
+        ]
+
+        res = self.client.get(f"/api/officer/complaints/{CID_1}")
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(res.headers.get("cache-control"), "no-store")
+        payload_text = res.text
+        self.assertNotIn("PRIVATE ADMIN NOTE MUST NOT LEAK", payload_text)
+        self.assertNotIn("LEGACY PRIVATE NOTE", payload_text)
+        self.assertNotIn("internal_note", payload_text)
+        self.assertNotIn("secret-citizen-uuid", payload_text)
+        self.assertNotIn("9999999999", payload_text)
+        self.assertNotIn("admin-secret-id", payload_text)
+        self.assertNotIn("assignment_audit", payload_text)
+        self.assertEqual(res.json()["complaint_reference"], "RU-2026-00055")
+        # Verify service queried public_complaint_history instead of complaint_status_history
+        queried_tables = [call.args[1] for call in mock_get.call_args_list]
+        self.assertEqual(queried_tables, ["complaints", "public_complaint_history", "complaint_escalations"])
+
+        # Missing or RLS-blocked complaint returns 404
+        mock_get.side_effect = [([], 0)]
+        res_404 = self.client.get(f"/api/officer/complaints/{CID_2}")
+        self.assertEqual(res_404.status_code, 404)
+
+    @patch("app.services.auth_service.verify_supabase_jwt", new_callable=AsyncMock)
+    def test_auth_dependency_rejects_expired_and_ignores_spoofed_metadata_role(self, mock_verify):
+        # 1. Expired / invalid JWT -> 401
+        mock_verify.side_effect = HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Authentication token has expired. Please sign in again.",
+        )
+        res_exp = self.client.get(
+            "/api/admin/sla-rules",
+            headers={"Authorization": "Bearer expired.jwt.token"},
+        )
+        self.assertEqual(res_exp.status_code, 401)
+
+        # 2. Spoofed user_metadata.role='admin' while public.profiles says 'citizen' -> 403
+        mock_verify.side_effect = None
+        mock_verify.return_value = {
+            "sub": "dddddddd-dddd-4ddd-8ddd-dddddddddddd",
+            "user_metadata": {"role": "admin"},
+        }
+        fake_res = MagicMock()
+        fake_res.status_code = 200
+        fake_res.json.return_value = [{"id": "dddddddd-dddd-4ddd-8ddd-dddddddddddd", "role": "citizen"}]
+
+        with patch("app.services.auth_service.httpx.AsyncClient") as mock_http_cls:
+            mock_client = AsyncMock()
+            mock_client.get.return_value = fake_res
+            mock_http_cls.return_value.__aenter__.return_value = mock_client
+
+            res_spoof = self.client.get(
+                "/api/admin/sla-rules",
+                headers={"Authorization": "Bearer valid.citizen.jwt"},
+            )
+            self.assertEqual(res_spoof.status_code, 403)
+

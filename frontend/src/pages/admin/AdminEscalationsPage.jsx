@@ -121,20 +121,7 @@ export default function AdminEscalationsPage({ api = null }) {
     }
   }, [selectedComplaintId, loadComplaintHistory]);
 
-  const openComplaintHistory = (complaintId) => {
-    setSelectedComplaintId(complaintId);
-    setReason('');
-    setReasonError(null);
-    setEscalateError(null);
-    setEscalateSuccess('');
-    setSearchParams((prev) => {
-      const next = new URLSearchParams(prev);
-      next.set('complaintId', complaintId);
-      return next;
-    });
-  };
-
-  const closeComplaintHistory = () => {
+  const closeComplaintHistory = useCallback(() => {
     setSelectedComplaintId('');
     setDetailData(null);
     setDetailError(null);
@@ -145,6 +132,30 @@ export default function AdminEscalationsPage({ api = null }) {
     setSearchParams((prev) => {
       const next = new URLSearchParams(prev);
       next.delete('complaintId');
+      return next;
+    });
+  }, [setSearchParams]);
+
+  useEffect(() => {
+    if (!selectedComplaintId) return undefined;
+    const onKeyDown = (e) => {
+      if (e.key === 'Escape' && !inFlightRef.current) {
+        closeComplaintHistory();
+      }
+    };
+    document.addEventListener('keydown', onKeyDown);
+    return () => document.removeEventListener('keydown', onKeyDown);
+  }, [selectedComplaintId, closeComplaintHistory]);
+
+  const openComplaintHistory = (complaintId) => {
+    setSelectedComplaintId(complaintId);
+    setReason('');
+    setReasonError(null);
+    setEscalateError(null);
+    setEscalateSuccess('');
+    setSearchParams((prev) => {
+      const next = new URLSearchParams(prev);
+      next.set('complaintId', complaintId);
       return next;
     });
   };
