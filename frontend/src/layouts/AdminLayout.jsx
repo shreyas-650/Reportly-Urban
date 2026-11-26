@@ -7,6 +7,8 @@ import {
   Building,
   Users,
   Sliders,
+  AlertOctagon,
+  Copy,
   ArrowLeft,
   LogOut,
   ExternalLink,
@@ -52,6 +54,18 @@ export default function AdminLayout() {
       to: '/admin/escalations',
       label: 'Escalations & History',
       icon: ShieldAlert,
+      end: false,
+    },
+    {
+      to: '/admin/disputes',
+      label: 'Disputed Complaints',
+      icon: AlertOctagon,
+      end: false,
+    },
+    {
+      to: '/admin/duplicates',
+      label: 'Suspected Duplicates',
+      icon: Copy,
       end: false,
     },
     {

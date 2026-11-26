@@ -18,6 +18,8 @@ import AdminComplaintDetailsPage from './pages/admin/AdminComplaintDetailsPage';
 import AdminDepartmentsPage from './pages/admin/AdminDepartmentsPage';
 import AdminOfficersPage from './pages/admin/AdminOfficersPage';
 import AdminEscalationsPage from './pages/admin/AdminEscalationsPage';
+import AdminDisputedComplaintsPage from './pages/admin/AdminDisputedComplaintsPage';
+import AdminDuplicatesPage from './pages/admin/AdminDuplicatesPage';
 import AdminSlaRulesPage from './pages/admin/AdminSlaRulesPage';
 import OfficerNotificationsPage from './pages/officer/OfficerNotificationsPage';
 import OfficerComplaintDetailsPage from './pages/officer/OfficerComplaintDetailsPage';
@@ -103,6 +105,8 @@ export default function App() {
               <Route path="departments" element={<AdminDepartmentsPage />} />
               <Route path="officers" element={<AdminOfficersPage />} />
               <Route path="escalations" element={<AdminEscalationsPage />} />
+              <Route path="disputes" element={<AdminDisputedComplaintsPage />} />
+              <Route path="duplicates" element={<AdminDuplicatesPage />} />
               <Route path="sla-rules" element={<AdminSlaRulesPage />} />
             </Route>
 

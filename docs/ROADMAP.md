@@ -1,19 +1,19 @@
 # ReportlyUrban Roadmap
 
-Status: Phases 1 to 7 are complete (Phase 7 = SLA rules, escalations, notifications, officer privacy hardening, map fix). Work one sub-phase at a time. Never start the next sub-phase without approval.
+Status: Phases 1 to 8, 9.1, and 9.4 are complete (Phase 7 = SLA rules, escalations, notifications, officer privacy hardening, map fix; Phase 8 = completion photos, advisory Gemini comparison, citizen confirm/dispute with reopen limit + SLA restart/escalation + officer notify, non-response auto-close, unified verification history, and admin disputed complaints queue; Phase 9.1 = AI category and priority suggestions in shadow mode; Phase 9.4 = rule-based + optional AI duplicate detection with flag & link only). Work one sub-phase at a time. Never start the next sub-phase without approval.
 
-## Phase 8: Before-and-After Verification
-- 8.1 Require a completion photo before an officer can mark a complaint resolved. Reuse the existing resolution photo/notes upload from Phase 4.3. Do not build a second upload system.
-- 8.2 Compare the original and completion photos with Gemini Vision. The AI only gives a suggestion ("looks fixed" / "does not look fixed") with a confidence score. It must never independently guarantee that physical work is complete. An admin and the citizen make the real decision.
-- 8.3 The citizen confirms or disputes the resolution. A dispute reopens the complaint, restarts its SLA clock, escalates it, and notifies the officer using the Phase 7 notification system. Limit the number of reopens per complaint; repeated disputes go to an admin. If the citizen does not respond within a set number of days, close it as "not confirmed by citizen", not as "verified".
-- 8.4 Keep a verification history for every check and add an admin list of disputed complaints.
-- Photo privacy: strip hidden location/EXIF data from stored photos; the AI must not identify faces or read number plates.
+## Phase 8: Before-and-After Verification (Complete)
+- [x] 8.1 Require a completion photo before an officer can mark a complaint resolved. Reuse the existing resolution photo/notes upload from Phase 4.3. Do not build a second upload system.
+- [x] 8.2 Compare the original and completion photos with Gemini Vision. The AI only gives a suggestion ("looks fixed" / "does not look fixed") with a confidence score. It must never independently guarantee that physical work is complete. An admin and the citizen make the real decision.
+- [x] 8.3 The citizen confirms or disputes the resolution. A dispute reopens the complaint, restarts its SLA clock, escalates it, and notifies the officer using the Phase 7 notification system. Limit the number of reopens per complaint; repeated disputes go to an admin. If the citizen does not respond within a set number of days, close it as "not confirmed by citizen", not as "verified".
+- [x] 8.4 Keep a verification history for every check and add an admin list of disputed complaints.
+- [x] Photo privacy: strip hidden location/EXIF data from stored photos; the AI must not identify faces or read number plates.
 
 ## Phase 9: AI Complaint Intelligence (starts with suggest-only)
-- 9.1 AI category and priority suggestions in shadow mode (stores suggestions, changes nothing, admin accepts or overrides).
+- [x] 9.1 AI category and priority suggestions in shadow mode (stores suggestions, changes nothing, admin accepts or overrides).
 - 9.2 Department auto-assignment (only after 9.1 accuracy is proven).
 - 9.3 Officer auto-assignment using eligibility and workload rules.
-- 9.4 Duplicate detection: flag and link potential duplicates, never silently reject.
+- [x] 9.4 Duplicate detection: flag and link potential duplicates, never silently reject.
 - 9.5 Suspicious or false claim screening: send to "needs more information" or review, never auto-reject.
 - 9.6 Accuracy dashboard (including accuracy by ward) and an appeal path for complaints held back by the AI. Do NOT build any reopen feature here; reopening is Phase 8.
 - 9.7 Narrow automatic rejection only for objective cases, after measuring false-positive rates.

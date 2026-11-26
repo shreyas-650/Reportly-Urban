@@ -165,11 +165,14 @@ async def get_citizen_verification_status(
 
     can_verify = bool(comp_status == "resolved" and latest_evidence_id and current_decision is None)
 
+    reopen_count = sum(1 for item in history if item["decision"] == "disputed")
     return {
         "complaint_id": str(complaint["id"]),
         "complaint_status": comp_status,
         "latest_evidence_id": latest_evidence_id,
         "can_verify": can_verify,
+        "reopen_count": reopen_count,
+        "max_reopens": settings.MAX_DISPUTE_REOPENS,
         "current_decision": current_decision,
         "history": history,
     }
@@ -260,6 +263,7 @@ async def submit_citizen_verification(
                     "p_evidence_id": resolved_evidence_id,
                     "p_decision": decision,
                     "p_reason": reason,
+                    "p_max_reopens": settings.MAX_DISPUTE_REOPENS,
                 },
                 headers=headers,
             )
@@ -284,6 +288,19 @@ async def submit_citizen_verification(
                 status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
                 detail="Unexpected response from verification service.",
             )
+        escalated_to_admin = bool(data.get("escalated_to_admin", False))
+        reopened = bool(data.get("reopened", False))
+        action = data.get("action") or (
+            "escalated_to_admin" if escalated_to_admin else ("reopened" if reopened else str(data.get("decision")))
+        )
+        msg = None
+        if escalated_to_admin:
+            msg = "Maximum automatic reopens reached. An administrator will review your dispute."
+        elif reopened:
+            msg = "Resolution disputed. The complaint has been reopened and escalated with a restarted SLA clock."
+        elif str(data.get("decision")) == "verified":
+            msg = "Thank you. Your verification has been recorded."
+
         return {
             "verification_id": str(data.get("verification_id")),
             "complaint_id": str(data.get("complaint_id")),
@@ -291,6 +308,13 @@ async def submit_citizen_verification(
             "decision": str(data.get("decision")),
             "reason": data.get("reason"),
             "complaint_status": str(data.get("complaint_status")),
+            "action": str(action),
+            "reopened": reopened,
+            "escalated_to_admin": escalated_to_admin,
+            "reopen_count": int(data.get("reopen_count", 0) or 0),
+            "max_reopens": data.get("max_reopens") if data.get("max_reopens") is not None else settings.MAX_DISPUTE_REOPENS,
+            "sla_deadline": data.get("sla_deadline"),
+            "message": msg,
             "created_at": str(data.get("created_at") or ""),
         }
 
@@ -382,6 +406,10 @@ async def get_admin_verification_history(
             "complaint_status": str(data.get("complaint_status") or ""),
             "latest_evidence_id": str(data["latest_evidence_id"]) if data.get("latest_evidence_id") else None,
             "latest_decision": data.get("latest_decision"),
+            "dispute_state": data.get("dispute_state"),
+            "reopen_count": int(data.get("reopen_count", 0) or 0),
+            "admin_resolution_note": data.get("admin_resolution_note"),
+            "admin_decided_at": data.get("admin_decided_at"),
             "history": [
                 {
                     "id": str(item.get("id")),
@@ -392,6 +420,19 @@ async def get_admin_verification_history(
                     "created_at": str(item.get("created_at") or ""),
                 }
                 for item in (data.get("history") if isinstance(data.get("history"), list) else [])
+            ],
+            "events": [
+                {
+                    "id": str(ev.get("id")),
+                    "evidence_id": str(ev["evidence_id"]) if ev.get("evidence_id") else None,
+                    "event_type": str(ev.get("event_type") or ""),
+                    "actor_type": str(ev.get("actor_type") or ""),
+                    "actor_display_name": str(ev.get("actor_display_name") or ""),
+                    "result": str(ev.get("result") or ""),
+                    "details": ev.get("details"),
+                    "created_at": str(ev.get("created_at") or ""),
+                }
+                for ev in (data.get("events") if isinstance(data.get("events"), list) else [])
             ],
         }
 
@@ -410,3 +451,154 @@ async def get_admin_verification_history(
         status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
         detail="Unable to load verification history.",
     )
+
+
+async def list_admin_disputes(
+    actor: AuthenticatedActor,
+    *,
+    dispute_filter: Optional[str],
+    page: int,
+    page_size: int,
+) -> Dict[str, Any]:
+    if actor.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator privileges required.",
+        )
+
+    headers = _user_headers(actor.token)
+    base_url = settings.SUPABASE_URL.rstrip("/")
+
+    try:
+        async with httpx.AsyncClient(timeout=_DB_TIMEOUT) as client:
+            rpc_res = await client.post(
+                f"{base_url}/rest/v1/rpc/list_admin_disputed_complaints",
+                json={
+                    "p_filter": dispute_filter,
+                    "p_page": page,
+                    "p_page_size": page_size,
+                },
+                headers=headers,
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Timed out while loading disputed complaints.",
+        )
+    except httpx.RequestError:
+        logger.exception("list_admin_disputes network_error")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to reach verification service.",
+        )
+
+    if rpc_res.status_code == 200:
+        data = rpc_res.json()
+        if not isinstance(data, dict):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Unexpected response from disputes service.",
+            )
+        return {
+            "items": [
+                {
+                    "complaint_id": str(row.get("complaint_id")),
+                    "complaint_reference": str(row.get("complaint_reference") or row.get("complaint_id")),
+                    "title": str(row.get("title") or ""),
+                    "category": str(row.get("category") or ""),
+                    "ward": str(row.get("ward") or ""),
+                    "complaint_status": str(row.get("complaint_status") or ""),
+                    "dispute_state": str(row.get("dispute_state") or ""),
+                    "reopen_count": int(row.get("reopen_count", 0) or 0),
+                    "latest_reason": row.get("latest_reason"),
+                    "citizen_display_name": str(row.get("citizen_display_name") or "Reporting Citizen"),
+                    "sla_deadline": row.get("sla_deadline"),
+                    "updated_at": str(row.get("updated_at") or ""),
+                    "admin_decided_at": row.get("admin_decided_at"),
+                }
+                for row in (data.get("items") if isinstance(data.get("items"), list) else [])
+            ],
+            "page": int(data.get("page", page) or page),
+            "page_size": int(data.get("page_size", page_size) or page_size),
+            "total": int(data.get("total", 0) or 0),
+            "total_pages": max(1, int(data.get("total_pages", 1) or 1)),
+        }
+
+    code, _ = _extract_pg_error(rpc_res)
+    logger.warning("list_admin_disputed_complaints failed status=%s code=%s", rpc_res.status_code, code or "unknown")
+    if code == "42501" or rpc_res.status_code in (401, 403):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Administrator privileges required.")
+    if code == "22023":
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid dispute filter parameter.")
+    raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Unable to load disputed complaints.")
+
+
+async def submit_admin_dispute_decision(
+    actor: AuthenticatedActor,
+    complaint_id: str,
+    *,
+    action: str,
+    note: str,
+) -> Dict[str, Any]:
+    if actor.role != "admin":
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Administrator privileges required.",
+        )
+
+    headers = _user_headers(actor.token)
+    base_url = settings.SUPABASE_URL.rstrip("/")
+
+    try:
+        async with httpx.AsyncClient(timeout=_DB_TIMEOUT) as client:
+            rpc_res = await client.post(
+                f"{base_url}/rest/v1/rpc/admin_decide_disputed_complaint",
+                json={
+                    "p_complaint_id": complaint_id,
+                    "p_action": action,
+                    "p_note": note,
+                },
+                headers=headers,
+            )
+    except httpx.TimeoutException:
+        raise HTTPException(
+            status_code=status.HTTP_504_GATEWAY_TIMEOUT,
+            detail="Timed out while recording admin dispute decision.",
+        )
+    except httpx.RequestError:
+        logger.exception("admin_decide_dispute network_error")
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Unable to reach verification service.",
+        )
+
+    if rpc_res.status_code == 200:
+        data = rpc_res.json()
+        if not isinstance(data, dict):
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Unexpected response from dispute decision service.",
+            )
+        return {
+            "complaint_id": str(data.get("complaint_id") or complaint_id),
+            "action": str(data.get("action") or action),
+            "complaint_status": str(data.get("complaint_status") or ""),
+            "dispute_state": str(data.get("dispute_state") or ""),
+            "admin_resolution_note": str(data.get("admin_resolution_note") or note),
+            "admin_decided_at": str(data.get("admin_decided_at") or ""),
+        }
+
+    code, _ = _extract_pg_error(rpc_res)
+    logger.warning(
+        "admin_decide_disputed_complaint failed status=%s code=%s complaint_id=%s",
+        rpc_res.status_code,
+        code or "unknown",
+        complaint_id,
+    )
+    if code == "42501" or rpc_res.status_code in (401, 403):
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Administrator privileges required.")
+    if code == "P0002":
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Complaint not found.")
+    if code in ("P0001", "22023"):
+        raise HTTPException(status_code=status.HTTP_422_UNPROCESSABLE_ENTITY, detail="Invalid dispute decision or complaint state.")
+    raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Unable to record admin dispute decision.")

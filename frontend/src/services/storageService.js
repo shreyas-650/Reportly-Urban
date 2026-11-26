@@ -101,6 +101,39 @@ export function generateStoragePath(userId, mimeType) {
  * @param {string} params.userId - Authenticated citizen's UUID v4
  * @returns {Promise<{ data: { path: string } | null, error: Error | null }>}
  */
+async function stripImageMetadataInBrowser(file) {
+  if (
+    typeof document === 'undefined' ||
+    typeof createImageBitmap !== 'function' ||
+    !file ||
+    !ALLOWED_MIME_TYPES.includes(file.type)
+  ) {
+    return file;
+  }
+  try {
+    const bitmap = await createImageBitmap(file);
+    try {
+      const canvas = document.createElement('canvas');
+      canvas.width = bitmap.width;
+      canvas.height = bitmap.height;
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return file;
+      ctx.drawImage(bitmap, 0, 0);
+      const blob = await new Promise((resolve) =>
+        canvas.toBlob(resolve, file.type, file.type === 'image/jpeg' ? 0.92 : undefined)
+      );
+      if (!blob) return file;
+      return new File([blob], file.name || `upload.${MIME_TO_EXTENSION[file.type] || 'jpg'}`, {
+        type: file.type,
+      });
+    } finally {
+      if (typeof bitmap.close === 'function') bitmap.close();
+    }
+  } catch {
+    return file;
+  }
+}
+
 export async function uploadComplaintImage({ file, userId }) {
   try {
     const validation = validateImageFile(file);
@@ -108,11 +141,12 @@ export async function uploadComplaintImage({ file, userId }) {
       return { data: null, error: new Error(validation.error) };
     }
 
+    const sanitizedFile = await stripImageMetadataInBrowser(file);
     const objectPath = generateStoragePath(userId, file.type);
 
     const { data, error } = await supabase.storage
       .from(COMPLAINT_STORAGE_BUCKET)
-      .upload(objectPath, file, {
+      .upload(objectPath, sanitizedFile, {
         cacheControl: '3600',
         upsert: false,
       });

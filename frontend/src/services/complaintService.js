@@ -15,6 +15,76 @@ export const VALID_CIVIC_CATEGORIES = [
   'public_infrastructure',
 ];
 
+const AI_SERVICE_BASE_URL = (
+  (typeof import.meta !== 'undefined' &&
+    import.meta.env &&
+    (import.meta.env.VITE_AI_SERVICE_URL || import.meta.env.VITE_API_BASE_URL)) ||
+  'http://localhost:8000'
+).replace(/\/$/, '');
+
+const BACKGROUND_TRIGGER_TIMEOUT_MS = 4000;
+
+async function triggerPostCreateEndpoint(complaintId, accessToken, endpointSuffix) {
+  if (!complaintId || !accessToken) {
+    console.warn('[complaintService] Skipping background trigger due to missing complaintId or session token.', {
+      endpoint: endpointSuffix,
+      hasComplaintId: Boolean(complaintId),
+      hasAccessToken: Boolean(accessToken),
+    });
+    return;
+  }
+  if (typeof fetch !== 'function') {
+    return;
+  }
+
+  const controller = typeof AbortController === 'function' ? new AbortController() : null;
+  const timer = controller ? setTimeout(() => controller.abort(), BACKGROUND_TRIGGER_TIMEOUT_MS) : null;
+
+  try {
+    const res = await fetch(
+      `${AI_SERVICE_BASE_URL}/api/citizen/complaints/${encodeURIComponent(complaintId)}/${endpointSuffix}`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          Accept: 'application/json',
+        },
+        ...(controller ? { signal: controller.signal } : {}),
+      }
+    );
+    if (res && !res.ok) {
+      console.warn('[complaintService] Background complaint hook returned non-OK status.', {
+        endpoint: endpointSuffix,
+        status: res.status,
+      });
+    }
+  } catch (err) {
+    console.warn('[complaintService] Background complaint hook request failed.', {
+      endpoint: endpointSuffix,
+      error: err?.message || String(err),
+    });
+  } finally {
+    if (timer) {
+      clearTimeout(timer);
+    }
+  }
+}
+
+async function triggerShadowAiSuggestion(complaintId, accessToken) {
+  return triggerPostCreateEndpoint(complaintId, accessToken, 'ai-suggestions');
+}
+
+async function triggerBackgroundDuplicateCheck(complaintId, accessToken) {
+  return triggerPostCreateEndpoint(complaintId, accessToken, 'duplicate-check');
+}
+
+async function runPostCreateBackgroundHooks(complaintId, accessToken) {
+  await Promise.allSettled([
+    triggerShadowAiSuggestion(complaintId, accessToken),
+    triggerBackgroundDuplicateCheck(complaintId, accessToken),
+  ]);
+}
+
 // RFC 4122 UUID v4 regex (version 4, variant 1 [89ab])
 export const UUID_V4_REGEX =
   /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
@@ -340,6 +410,7 @@ export async function createComplaint({
 
     // 9. Confirmed Success
     if (!error && data) {
+      await runPostCreateBackgroundHooks(data.id, session?.access_token);
       return {
         data,
         error: null,
@@ -355,6 +426,7 @@ export async function createComplaint({
           const recovery = await recoverySelectByIdempotencyKey(supabaseClient, idempotencyKey);
 
           if (recovery.data) {
+            await runPostCreateBackgroundHooks(recovery.data.id, session?.access_token);
             return {
               data: recovery.data,
               error: null,
@@ -396,6 +468,7 @@ export async function createComplaint({
         const recovery = await recoverySelectByIdempotencyKey(supabaseClient, idempotencyKey);
 
         if (recovery.data) {
+          await runPostCreateBackgroundHooks(recovery.data.id, session?.access_token);
           return {
             data: recovery.data,
             error: null,

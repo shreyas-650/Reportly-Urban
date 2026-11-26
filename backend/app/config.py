@@ -34,6 +34,16 @@ def _parse_positive_int(raw_value: Optional[str], default: int) -> int:
     except ValueError:
         return default
 
+
+def _parse_non_negative_int(raw_value: Optional[str], default: int) -> int:
+    if not raw_value:
+        return default
+    try:
+        val = int(raw_value.strip())
+        return val if val >= 0 else default
+    except ValueError:
+        return default
+
 def _strip_env_value(raw_value: Optional[str], default: str = "") -> str:
     if not isinstance(raw_value, str):
         return default
@@ -44,6 +54,28 @@ def _strip_env_value(raw_value: Optional[str], default: str = "") -> str:
     ):
         cleaned = cleaned[1:-1].strip()
     return cleaned or default
+
+
+def parse_department_routing_mode(raw_value: Optional[str]) -> str:
+    """Strict routing mode parser: only off|shadow|active allowed, default shadow."""
+    if not isinstance(raw_value, str):
+        return "shadow"
+    cleaned = raw_value.strip().lower()
+    if cleaned in ("off", "shadow", "active"):
+        return cleaned
+    return "shadow"
+
+
+def _parse_unit_float(raw_value: Optional[str], default: float) -> float:
+    if not raw_value:
+        return default
+    try:
+        val = float(raw_value.strip())
+        if 0.0 <= val <= 1.0:
+            return val
+        return default
+    except ValueError:
+        return default
 
 
 class Settings(BaseModel):
@@ -100,6 +132,61 @@ class Settings(BaseModel):
     )
     AI_RESOLUTION_PENDING_TIMEOUT_MINUTES: int = _parse_positive_int(
         os.getenv("AI_RESOLUTION_PENDING_TIMEOUT_MINUTES"), default=5
+    )
+
+    # Phase 8.3/8.4 Citizen Verification Reopen Limit & Non-Response Auto-Close
+    MAX_DISPUTE_REOPENS: int = Field(
+        default_factory=lambda: _parse_non_negative_int(os.getenv("MAX_DISPUTE_REOPENS"), default=2)
+    )
+    CITIZEN_VERIFY_TIMEOUT_DAYS: int = Field(
+        default_factory=lambda: _parse_positive_int(os.getenv("CITIZEN_VERIFY_TIMEOUT_DAYS"), default=7)
+    )
+
+    # Phase 9.1 AI Complaint Intelligence (Shadow Mode, fail-closed default False)
+    AI_INTELLIGENCE_ENABLED: bool = Field(
+        default_factory=lambda: parse_fail_closed_bool(os.getenv("AI_INTELLIGENCE_ENABLED"))
+    )
+    AI_INTELLIGENCE_DAILY_CAP: int = _parse_positive_int(
+        os.getenv("AI_INTELLIGENCE_DAILY_CAP"), default=300
+    )
+    AI_INTELLIGENCE_PER_USER_PER_MINUTE: int = _parse_positive_int(
+        os.getenv("AI_INTELLIGENCE_PER_USER_PER_MINUTE"), default=10
+    )
+    AI_INTELLIGENCE_GLOBAL_PER_MINUTE: int = _parse_positive_int(
+        os.getenv("AI_INTELLIGENCE_GLOBAL_PER_MINUTE"), default=30
+    )
+    AI_INTELLIGENCE_PENDING_TIMEOUT_MINUTES: int = _parse_positive_int(
+        os.getenv("AI_INTELLIGENCE_PENDING_TIMEOUT_MINUTES"), default=5
+    )
+
+    # Phase 9.4 Duplicate Detection Configuration
+    DUPLICATE_DETECTION_RADIUS_METERS: float = float(
+        _parse_positive_int(os.getenv("DUPLICATE_DETECTION_RADIUS_METERS"), default=250)
+    )
+    DUPLICATE_DETECTION_WINDOW_DAYS: int = _parse_positive_int(
+        os.getenv("DUPLICATE_DETECTION_WINDOW_DAYS"), default=14
+    )
+    DUPLICATE_DETECTION_MAX_CANDIDATES: int = _parse_positive_int(
+        os.getenv("DUPLICATE_DETECTION_MAX_CANDIDATES"), default=5
+    )
+
+    # Phase 9.2 AI Department Auto-Assignment (safety-first default: shadow)
+    DEPARTMENT_AUTO_ASSIGN_MODE: str = Field(
+        default_factory=lambda: parse_department_routing_mode(
+            os.getenv("DEPARTMENT_AUTO_ASSIGN_MODE")
+        )
+    )
+    DEPARTMENT_AUTO_ASSIGN_MIN_SAMPLES: int = _parse_positive_int(
+        os.getenv("DEPARTMENT_AUTO_ASSIGN_MIN_SAMPLES"), default=50
+    )
+    DEPARTMENT_AUTO_ASSIGN_MIN_ACCURACY: float = _parse_unit_float(
+        os.getenv("DEPARTMENT_AUTO_ASSIGN_MIN_ACCURACY"), default=0.95
+    )
+    DEPARTMENT_AUTO_ASSIGN_METRICS_MAX_AGE_DAYS: int = _parse_positive_int(
+        os.getenv("DEPARTMENT_AUTO_ASSIGN_METRICS_MAX_AGE_DAYS"), default=14
+    )
+    DEPARTMENT_AUTO_ASSIGN_MIN_CONFIDENCE: float = _parse_unit_float(
+        os.getenv("DEPARTMENT_AUTO_ASSIGN_MIN_CONFIDENCE"), default=0.85
     )
 
 settings = Settings()

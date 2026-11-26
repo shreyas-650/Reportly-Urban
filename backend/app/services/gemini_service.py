@@ -37,6 +37,7 @@ CRITICAL SECURITY AND SAFETY RULES:
    - suggested_title must be a concise, objective summary (between 5 and 60 characters).
    - suggested_description must describe the visible defect, size/severity, and impact on pedestrians or traffic (between 25 and 300 characters).
    - Do NOT invent specific addresses, ward names, or officer names.
+   - NEVER identify faces or people, and NEVER read or include vehicle license/number plates.
    - confidence must reflect visual clarity (between 0.0 and 1.0).
 6. If the image is blurry, ambiguous, or the defect cannot be identified with high certainty, set confidence below 0.60 and provide uncertainty_reason.
 """

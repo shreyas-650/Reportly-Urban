@@ -131,3 +131,58 @@ async def trigger_sla_sweep(batch_limit: int) -> Dict[str, Any]:
         service_label="SLA sweep",
     )
     return sanitize_sweep_result(raw)
+
+
+def validate_timeout_days(raw_value: Any = None) -> int:
+    if raw_value is None or raw_value == "":
+        val = settings.CITIZEN_VERIFY_TIMEOUT_DAYS
+    elif isinstance(raw_value, bool):
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid timeout_days parameter.",
+            headers={"Cache-Control": "no-store"},
+        )
+    else:
+        try:
+            val = int(raw_value)
+        except (TypeError, ValueError):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid timeout_days parameter.",
+                headers={"Cache-Control": "no-store"},
+            )
+    if val < 1 or val > 365:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid timeout_days parameter.",
+            headers={"Cache-Control": "no-store"},
+        )
+    return val
+
+
+async def trigger_unconfirmed_auto_close(
+    *, timeout_days: int, batch_limit: int, dry_run: bool = False
+) -> Dict[str, Any]:
+    """Executes public.close_unconfirmed_resolved_complaints() via service_role (supports dry-run)."""
+    raw = await _call_public_rpc(
+        "close_unconfirmed_resolved_complaints",
+        payload={
+            "p_timeout_days": timeout_days,
+            "p_batch_limit": batch_limit,
+            "p_dry_run": bool(dry_run),
+        },
+        timeout_seconds=settings.SLA_SWEEP_TIMEOUT_SECONDS,
+        service_label="Unconfirmed verification auto-close",
+    )
+    if not isinstance(raw, dict):
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Auto-close service returned an unexpected response.",
+            headers={"Cache-Control": "no-store"},
+        )
+    return {
+        "dry_run": bool(raw.get("dry_run", dry_run)),
+        "timeout_days": int(raw.get("timeout_days", timeout_days) or timeout_days),
+        "eligible_count": int(raw.get("eligible_count", 0) or 0),
+        "closed_count": int(raw.get("closed_count", 0) or 0),
+    }

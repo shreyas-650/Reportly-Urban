@@ -68,6 +68,13 @@ export function getStatusColor(status) {
         border: 'border-rose-200',
         dot: 'bg-rose-500',
       };
+    case 'not_confirmed_by_citizen':
+      return {
+        bg: 'bg-slate-100',
+        text: 'text-slate-700',
+        border: 'border-slate-300',
+        dot: 'bg-slate-500',
+      };
     case 'submitted':
     case 'pending':
     default:
@@ -94,6 +101,8 @@ export function formatStatusLabel(status) {
       return 'Resolved';
     case 'rejected':
       return 'Rejected';
+    case 'not_confirmed_by_citizen':
+      return 'Not Confirmed by Citizen';
     default:
       return status ? status.charAt(0).toUpperCase() + status.slice(1) : 'Pending';
   }

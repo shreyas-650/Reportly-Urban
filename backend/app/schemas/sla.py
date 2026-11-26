@@ -25,7 +25,7 @@ VALID_NOTIFICATION_KINDS: FrozenSet[str] = frozenset(
     {"reminder", "escalation", "escalation_blocked", "assignment"}
 )
 VALID_COMPLAINT_STATUSES: FrozenSet[str] = frozenset(
-    {"submitted", "under_review", "in_progress", "resolved", "rejected"}
+    {"submitted", "under_review", "in_progress", "resolved", "rejected", "not_confirmed_by_citizen"}
 )
 
 

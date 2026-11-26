@@ -6,7 +6,13 @@ All routes enforce Supabase ES256 JWT + authoritative public.profiles admin role
 from fastapi import APIRouter, BackgroundTasks, Body, Depends, File, HTTPException, Request, Response, UploadFile, status
 
 from app.schemas.ai_resolution import AiResolutionCheckResponse, AiResolutionRerunRequest
-from app.schemas.verification import AdminVerificationHistoryResponse
+from app.schemas.verification import (
+    AdminDisputeDecisionRequest,
+    AdminDisputeDecisionResponse,
+    AdminDisputedComplaintsListResponse,
+    AdminVerificationHistoryResponse,
+    VALID_DISPUTE_FILTERS,
+)
 
 from app.schemas.resolution import (
     RegisterResolutionPhotoRequest,
@@ -50,7 +56,11 @@ from app.services.ai_resolution_service import (
     rerun_admin_ai_resolution_check,
     schedule_post_resolve_ai_check,
 )
-from app.services.verification_service import get_admin_verification_history
+from app.services.verification_service import (
+    get_admin_verification_history,
+    list_admin_disputes,
+    submit_admin_dispute_decision,
+)
 
 router = APIRouter(prefix="/api/admin", tags=["Admin SLA & Escalations"])
 
@@ -323,5 +333,64 @@ async def get_admin_complaint_verifications_endpoint(
     reject_extra_query_params(request, frozenset())
     clean_id = parse_uuid_param(complaint_id, "complaint_id")
     data = await get_admin_verification_history(actor, clean_id)
+    response.headers["Cache-Control"] = "no-store"
+    return data
+
+
+@router.get(
+    "/disputes",
+    response_model=AdminDisputedComplaintsListResponse,
+)
+async def list_admin_disputes_endpoint(
+    request: Request,
+    response: Response,
+    actor: AuthenticatedActor = Depends(require_admin),
+):
+    reject_extra_query_params(request, frozenset({"status", "page", "page_size"}))
+
+    raw_status = request.query_params.get("status")
+    dispute_filter = None
+    if raw_status is not None and raw_status.strip() != "":
+        dispute_filter = raw_status.strip().lower()
+        if dispute_filter not in VALID_DISPUTE_FILTERS:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid dispute status filter.",
+            )
+
+    page, page_size = validate_bounded_pagination(
+        request.query_params.get("page"),
+        request.query_params.get("page_size"),
+        default_size=20,
+        max_size=100,
+    )
+
+    data = await list_admin_disputes(
+        actor,
+        dispute_filter=dispute_filter,
+        page=page,
+        page_size=page_size,
+    )
+    response.headers["Cache-Control"] = "no-store"
+    return data
+
+
+@router.post(
+    "/complaints/{complaint_id}/dispute-decision",
+    response_model=AdminDisputeDecisionResponse,
+)
+async def submit_admin_dispute_decision_endpoint(
+    complaint_id: str,
+    payload: AdminDisputeDecisionRequest,
+    response: Response,
+    actor: AuthenticatedActor = Depends(require_admin),
+):
+    clean_id = parse_uuid_param(complaint_id, "complaint_id")
+    data = await submit_admin_dispute_decision(
+        actor,
+        clean_id,
+        action=payload.action,
+        note=payload.note,
+    )
     response.headers["Cache-Control"] = "no-store"
     return data

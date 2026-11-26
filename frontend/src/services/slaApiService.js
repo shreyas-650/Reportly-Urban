@@ -438,3 +438,105 @@ export function fetchAdminComplaintVerifications(complaintId, options = {}) {
     }
   );
 }
+
+export function fetchAdminDisputes(filters = {}, options = {}) {
+  return apiRequest('/api/admin/disputes', {
+    method: 'GET',
+    query: filters,
+    ...options,
+  });
+}
+
+export function submitAdminDisputeDecision(complaintId, payload, options = {}) {
+  return apiRequest(
+    `/api/admin/complaints/${encodeURIComponent(complaintId)}/dispute-decision`,
+    {
+      method: 'POST',
+      body: payload,
+      ...options,
+    }
+  );
+}
+
+export function fetchAdminComplaintAiSuggestion(complaintId, options = {}) {
+  return apiRequest(
+    `/api/admin/complaints/${encodeURIComponent(complaintId)}/ai-suggestions`,
+    {
+      method: 'GET',
+      ...options,
+    }
+  );
+}
+
+export function acceptAdminComplaintAiSuggestion(complaintId, payload = {}, options = {}) {
+  return apiRequest(
+    `/api/admin/complaints/${encodeURIComponent(complaintId)}/ai-suggestions/accept`,
+    {
+      method: 'POST',
+      body: payload,
+      ...options,
+    }
+  );
+}
+
+export function overrideAdminComplaintAiSuggestion(complaintId, payload, options = {}) {
+  return apiRequest(
+    `/api/admin/complaints/${encodeURIComponent(complaintId)}/ai-suggestions/override`,
+    {
+      method: 'POST',
+      body: payload,
+      ...options,
+    }
+  );
+}
+
+export function ignoreAdminComplaintAiSuggestion(complaintId, payload = {}, options = {}) {
+  return apiRequest(
+    `/api/admin/complaints/${encodeURIComponent(complaintId)}/ai-suggestions/ignore`,
+    {
+      method: 'POST',
+      body: payload,
+      ...options,
+    }
+  );
+}
+
+export function fetchAdminComplaintDuplicates(complaintId, options = {}) {
+  return apiRequest(
+    `/api/admin/complaints/${encodeURIComponent(complaintId)}/duplicates`,
+    {
+      method: 'GET',
+      ...options,
+    }
+  );
+}
+
+export function fetchAdminDuplicates(filters = {}, options = {}) {
+  return apiRequest('/api/admin/duplicates', {
+    method: 'GET',
+    query: filters,
+    ...options,
+  });
+}
+
+export function confirmAdminDuplicateLink(linkId, options = {}) {
+  return apiRequest(
+    `/api/admin/duplicates/${encodeURIComponent(linkId)}/confirm`,
+    {
+      method: 'POST',
+      body: {},
+      ...options,
+    }
+  );
+}
+
+export function dismissAdminDuplicateLink(linkId, options = {}) {
+  return apiRequest(
+    `/api/admin/duplicates/${encodeURIComponent(linkId)}/not-duplicate`,
+    {
+      method: 'POST',
+      body: {},
+      ...options,
+    }
+  );
+}

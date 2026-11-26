@@ -225,23 +225,198 @@ class Phase83VerificationEndpointTests(unittest.TestCase):
         self.assertEqual(body["latest_decision"], "disputed")
         self.assertEqual(body["history"][0]["citizen_display_name"], "Asha R.")
 
+    def test_reopen_limit_escalates_to_admin_and_env_config_applies(self):
+        from app.config import Settings
+
+        with patch.dict(os.environ, {"MAX_DISPUTE_REOPENS": "1", "CITIZEN_VERIFY_TIMEOUT_DAYS": "14"}):
+            cfg = Settings()
+            self.assertEqual(cfg.MAX_DISPUTE_REOPENS, 1)
+            self.assertEqual(cfg.CITIZEN_VERIFY_TIMEOUT_DAYS, 14)
+
+        app.dependency_overrides[get_authenticated_actor] = lambda: CITIZEN_ACTOR
+        captured_rpc_payload = {}
+
+        async def fake_post_escalate(client_self, url, **kwargs):
+            captured_rpc_payload["json"] = kwargs.get("json")
+            return _mock_http_response(
+                200,
+                {
+                    "verification_id": VID_1,
+                    "complaint_id": CID_1,
+                    "evidence_id": EID_1,
+                    "decision": "disputed",
+                    "reason": "Third dispute after max reopens.",
+                    "complaint_status": "resolved",
+                    "action": "escalated_to_admin",
+                    "reopened": False,
+                    "escalated_to_admin": True,
+                    "reopen_count": 2,
+                    "max_reopens": 2,
+                    "created_at": "2026-11-25T13:00:00Z",
+                },
+            )
+
+        with patch("app.services.verification_service.settings.SUPABASE_URL", "https://example.supabase.co"), \
+             patch("app.services.verification_service.settings.SUPABASE_ANON_KEY", "anon-key"), \
+             patch("app.services.verification_service.settings.MAX_DISPUTE_REOPENS", 2), \
+             patch("httpx.AsyncClient.post", new=fake_post_escalate):
+            res = self.client.post(
+                f"/api/complaints/{CID_1}/resolution/dispute",
+                json={"evidence_id": EID_1, "reason": "Third dispute after max reopens."},
+            )
+
+        self.assertEqual(res.status_code, 200)
+        self.assertEqual(captured_rpc_payload["json"]["p_max_reopens"], 2)
+        body = res.json()
+        self.assertFalse(body["reopened"])
+        self.assertTrue(body["escalated_to_admin"])
+        self.assertIn("administrator will review", body["message"].lower())
+
+    def test_admin_disputes_list_and_decision_endpoints(self):
+        # Citizen & officer cannot access admin dispute queue or decision endpoint
+        for actor in (CITIZEN_ACTOR, OFFICER_ACTOR):
+            app.dependency_overrides[get_authenticated_actor] = lambda a=actor: a
+            self.assertEqual(self.client.get("/api/admin/disputes").status_code, 403)
+            self.assertEqual(
+                self.client.post(
+                    f"/api/admin/complaints/{CID_1}/dispute-decision",
+                    json={"action": "reopen", "note": "Valid admin note."},
+                ).status_code,
+                403,
+            )
+
+        app.dependency_overrides[get_authenticated_actor] = lambda: ADMIN_ACTOR
+        self.assertEqual(self.client.get("/api/admin/disputes?status=bogus").status_code, 400)
+        self.assertEqual(
+            self.client.post(
+                f"/api/admin/complaints/{CID_1}/dispute-decision",
+                json={"action": "invalid", "note": "Valid admin note."},
+            ).status_code,
+            422,
+        )
+
+        async def fake_post_admin(client_self, url, **kwargs):
+            if "/rpc/list_admin_disputed_complaints" in url:
+                return _mock_http_response(
+                    200,
+                    {
+                        "items": [
+                            {
+                                "complaint_id": CID_1,
+                                "complaint_reference": "RU-2026-00999",
+                                "title": "Broken Drain",
+                                "category": "drainage",
+                                "ward": "Ward 2",
+                                "complaint_status": "resolved",
+                                "dispute_state": "escalated_to_admin",
+                                "reopen_count": 2,
+                                "latest_reason": "Still blocked",
+                                "citizen_display_name": "Asha R.",
+                                "sla_deadline": "2026-11-28T10:00:00Z",
+                                "updated_at": "2026-11-25T13:00:00Z",
+                                "admin_decided_at": None,
+                            }
+                        ],
+                        "page": 1,
+                        "page_size": 20,
+                        "total": 1,
+                        "total_pages": 1,
+                    },
+                )
+            if "/rpc/admin_decide_disputed_complaint" in url:
+                return _mock_http_response(
+                    200,
+                    {
+                        "complaint_id": CID_1,
+                        "action": "close_unconfirmed",
+                        "complaint_status": "not_confirmed_by_citizen",
+                        "dispute_state": "admin_resolved",
+                        "admin_resolution_note": "Verified closed on site.",
+                        "admin_decided_at": "2026-11-25T14:00:00Z",
+                    },
+                )
+            return _mock_http_response(404)
+
+        with patch("app.services.verification_service.settings.SUPABASE_URL", "https://example.supabase.co"), \
+             patch("app.services.verification_service.settings.SUPABASE_ANON_KEY", "anon-key"), \
+             patch("httpx.AsyncClient.post", new=fake_post_admin):
+            list_res = self.client.get("/api/admin/disputes?status=escalated_to_admin")
+            self.assertEqual(list_res.status_code, 200)
+            self.assertEqual(list_res.headers.get("cache-control"), "no-store")
+            self.assertEqual(list_res.json()["items"][0]["dispute_state"], "escalated_to_admin")
+
+            dec_res = self.client.post(
+                f"/api/admin/complaints/{CID_1}/dispute-decision",
+                json={"action": "close_unconfirmed", "note": "Verified closed on site."},
+            )
+            self.assertEqual(dec_res.status_code, 200)
+            self.assertEqual(dec_res.json()["complaint_status"], "not_confirmed_by_citizen")
+
+    def test_internal_close_unconfirmed_dry_run_and_auth(self):
+        secret = "test-sweep-secret-minimum-32-characters-long"
+        with patch("app.services.sla_service.settings.SLA_SWEEP_SECRET", secret):
+            self.assertEqual(self.client.post("/api/internal/close-unconfirmed", json={"dry_run": True}).status_code, 403)
+            self.assertEqual(
+                self.client.post(
+                    "/api/internal/close-unconfirmed?timeout_days=0",
+                    headers={"x-sweep-secret": secret},
+                ).status_code,
+                400,
+            )
+
+            with patch(
+                "app.services.sla_service._call_public_rpc",
+                new_callable=AsyncMock,
+                return_value={"dry_run": True, "timeout_days": 7, "eligible_count": 3, "closed_count": 0},
+            ) as mock_rpc:
+                res = self.client.post(
+                    "/api/internal/close-unconfirmed",
+                    headers={"x-sweep-secret": secret},
+                    json={"dry_run": True, "timeout_days": 7, "batch_limit": 50},
+                )
+            self.assertEqual(res.status_code, 200)
+            self.assertEqual(res.headers.get("cache-control"), "no-store")
+            self.assertTrue(res.json()["dry_run"])
+            self.assertEqual(res.json()["eligible_count"], 3)
+            self.assertEqual(res.json()["closed_count"], 0)
+            mock_rpc.assert_awaited_once()
+
 
 class Phase83MigrationStaticReviewTests(unittest.TestCase):
     def test_migration_and_rollback_integrity(self):
-        mig = (REPO_ROOT / "supabase/migrations/20261130_phase8_3_verification_dispute.sql").read_text(encoding="utf-8")
-        undo = (REPO_ROOT / "supabase/rollbacks/20261130_phase8_3_verification_dispute_UNDO.sql").read_text(encoding="utf-8")
+        mig1 = (REPO_ROOT / "supabase/migrations/20261130_phase8_3_verification_dispute.sql").read_text(encoding="utf-8")
+        undo1 = (REPO_ROOT / "supabase/rollbacks/20261130_phase8_3_verification_dispute_UNDO.sql").read_text(encoding="utf-8")
+        mig_enum = (REPO_ROOT / "supabase/migrations/20261201_phase8_4_status_enum_extend.sql").read_text(encoding="utf-8")
+        mig2 = (REPO_ROOT / "supabase/migrations/20261202_phase8_4_complete_verification_and_disputes.sql").read_text(encoding="utf-8")
+        undo2 = (REPO_ROOT / "supabase/rollbacks/20261202_phase8_4_complete_verification_and_disputes_UNDO.sql").read_text(encoding="utf-8")
 
-        self.assertIn("CREATE TABLE IF NOT EXISTS public.complaint_resolution_verifications", mig)
-        self.assertIn("CONSTRAINT uq_resolution_verification_evidence_citizen UNIQUE (evidence_id, citizen_id)", mig)
-        self.assertIn("ENABLE ROW LEVEL SECURITY", mig)
-        self.assertIn("FORCE ROW LEVEL SECURITY", mig)
-        self.assertIn("BEFORE UPDATE OR DELETE ON public.complaint_resolution_verifications", mig)
-        self.assertIn("BEFORE TRUNCATE ON public.complaint_resolution_verifications", mig)
-        self.assertIn("SET search_path = ''", mig)
-        self.assertIn("pg_catalog.aclexplode", mig)
-        self.assertNotIn("has_table_privilege('PUBLIC'", mig)
-        self.assertNotIn("has_function_privilege('PUBLIC'", mig)
-        self.assertIn("GRANT EXECUTE ON FUNCTION public.submit_resolution_verification(UUID, UUID, TEXT, TEXT) TO authenticated;", mig)
-        self.assertIn("GRANT EXECUTE ON FUNCTION public.get_ai_resolution_check_inputs(UUID) TO service_role;", mig)
-        self.assertIn("GRANT EXECUTE ON FUNCTION public.count_ai_resolution_checks_since(TIMESTAMPTZ, UUID) TO service_role;", mig)
-        self.assertIn("DROP TABLE IF EXISTS public.complaint_resolution_verifications;", undo)
+        self.assertIn("CREATE TABLE IF NOT EXISTS public.complaint_resolution_verifications", mig1)
+        self.assertIn("CONSTRAINT uq_resolution_verification_evidence_citizen UNIQUE (evidence_id, citizen_id)", mig1)
+        self.assertIn("ENABLE ROW LEVEL SECURITY", mig1)
+        self.assertIn("FORCE ROW LEVEL SECURITY", mig1)
+        self.assertIn("BEFORE UPDATE OR DELETE ON public.complaint_resolution_verifications", mig1)
+        self.assertIn("BEFORE TRUNCATE ON public.complaint_resolution_verifications", mig1)
+        self.assertIn("SET search_path = ''", mig1)
+        self.assertIn("pg_catalog.aclexplode", mig1)
+        self.assertNotIn("has_table_privilege('PUBLIC'", mig1)
+        self.assertNotIn("has_function_privilege('PUBLIC'", mig1)
+        self.assertIn("GRANT EXECUTE ON FUNCTION public.get_ai_resolution_check_inputs(UUID) TO service_role;", mig1)
+        self.assertIn("GRANT EXECUTE ON FUNCTION public.count_ai_resolution_checks_since(TIMESTAMPTZ, UUID) TO service_role;", mig1)
+        self.assertIn("DROP TABLE IF EXISTS public.complaint_resolution_verifications;", undo1)
+
+        self.assertIn("ADD VALUE IF NOT EXISTS 'not_confirmed_by_citizen'", mig_enum)
+        self.assertIn("CREATE TABLE IF NOT EXISTS public.complaint_dispute_cases", mig2)
+        self.assertIn("CREATE TABLE IF NOT EXISTS public.complaint_verification_history", mig2)
+        self.assertIn("GRANT EXECUTE ON FUNCTION public.submit_resolution_verification(UUID, UUID, TEXT, TEXT, INT) TO authenticated;", mig2)
+        self.assertIn("GRANT EXECUTE ON FUNCTION public.close_unconfirmed_resolved_complaints(INT, INT, BOOLEAN) TO service_role;", mig2)
+        self.assertIn("GRANT EXECUTE ON FUNCTION public.list_admin_disputed_complaints(TEXT, INT, INT) TO authenticated;", mig2)
+        self.assertIn("GRANT EXECUTE ON FUNCTION public.admin_decide_disputed_complaint(UUID, TEXT, TEXT) TO authenticated;", mig2)
+        self.assertIn("pg_catalog.aclexplode", mig2)
+        self.assertIn("DROP TABLE IF EXISTS public.complaint_verification_history;", undo2)
+
+        # Privacy prompts check (Step 3)
+        from app.services.gemini_service import SYSTEM_INSTRUCTION
+        from app.services.ai_resolution_service import AI_COMPARISON_SYSTEM_INSTRUCTION
+        for prompt_text in (SYSTEM_INSTRUCTION, AI_COMPARISON_SYSTEM_INSTRUCTION):
+            self.assertIn("faces", prompt_text.lower())
+            self.assertIn("number plates", prompt_text.lower())

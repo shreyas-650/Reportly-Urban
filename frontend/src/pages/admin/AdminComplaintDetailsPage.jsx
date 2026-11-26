@@ -47,6 +47,8 @@ import { useAuth } from '../../context/AuthContext';
 import StatusBadge from '../../components/common/StatusBadge';
 import PriorityBadge from '../../components/common/PriorityBadge';
 import AdminAiResolutionPanel from '../../components/admin/AdminAiResolutionPanel';
+import AdminAiSuggestionPanel from '../../components/admin/AdminAiSuggestionPanel';
+import AdminDuplicateLinksPanel from '../../components/admin/AdminDuplicateLinksPanel';
 import AdminVerificationHistoryPanel from '../../components/admin/AdminVerificationHistoryPanel';
 import ComplaintLocationMap from '../../components/maps/ComplaintLocationMap';
 import { formatDateTime } from '../../utils/formatters';
@@ -677,6 +679,19 @@ export default function AdminComplaintDetailsPage({ backTo = '/admin/complaints'
 
           {isAdmin && (
             <>
+              <AdminAiSuggestionPanel
+                complaintId={complaint.id}
+                complaintCategory={complaint.category}
+                complaintPriority={complaint.priority}
+                complaintStatus={complaint.status}
+                expectedUpdatedAt={complaint.updated_at}
+                isAdmin={isAdmin}
+                onDecisionSaved={loadDetails}
+              />
+              <AdminDuplicateLinksPanel
+                complaintId={complaint.id}
+                isAdmin={isAdmin}
+              />
               <AdminAiResolutionPanel
                 complaintId={complaint.id}
                 complaintStatus={complaint.status}
@@ -686,6 +701,7 @@ export default function AdminComplaintDetailsPage({ backTo = '/admin/complaints'
                 complaintId={complaint.id}
                 complaintStatus={complaint.status}
                 isAdmin={isAdmin}
+                onDisputeDecided={loadDetails}
               />
             </>
           )}

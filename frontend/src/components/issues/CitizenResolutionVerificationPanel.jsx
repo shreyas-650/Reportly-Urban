@@ -95,16 +95,21 @@ export default function CitizenResolutionVerificationPanel({
     setActionError(null);
     setActionNotice(null);
     try {
-      await disputeFn(complaintId, {
+      const res = await disputeFn(complaintId, {
         evidence_id: state.latest_evidence_id || undefined,
         reason: trimmed,
       });
       setShowDisputeForm(false);
       setDisputeReason('');
-      setActionNotice('Resolution disputed. The complaint has been reopened for remediation.');
+      setActionNotice(
+        res?.message ||
+          (res?.escalated_to_admin
+            ? 'Maximum automatic reopens reached. An administrator will review your dispute.'
+            : 'Resolution disputed. The complaint has been reopened and escalated for action.')
+      );
       await loadVerification();
       if (typeof onDecisionSubmitted === 'function') {
-        await onDecisionSubmitted('disputed');
+        await onDecisionSubmitted(res?.escalated_to_admin ? 'escalated_to_admin' : 'disputed');
       }
     } catch (err) {
       setActionError(err?.message || 'Unable to submit dispute right now.');
