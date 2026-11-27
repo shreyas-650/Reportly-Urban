@@ -50,6 +50,7 @@ import PriorityBadge from '../../components/common/PriorityBadge';
 import AdminAiResolutionPanel from '../../components/admin/AdminAiResolutionPanel';
 import AdminAiSuggestionPanel from '../../components/admin/AdminAiSuggestionPanel';
 import AdminDuplicateLinksPanel from '../../components/admin/AdminDuplicateLinksPanel';
+import AdminScreeningPanel from '../../components/admin/AdminScreeningPanel';
 import AdminVerificationHistoryPanel from '../../components/admin/AdminVerificationHistoryPanel';
 import ComplaintLocationMap from '../../components/maps/ComplaintLocationMap';
 import { formatDateTime } from '../../utils/formatters';
@@ -74,6 +75,7 @@ export default function AdminComplaintDetailsPage({ backTo = '/admin/complaints'
   const [saveSuccess, setSaveSuccess] = useState(false);
   const [saveError, setSaveError] = useState(null);
   const [showConfirmModal, setShowConfirmModal] = useState(false);
+  const [screeningData, setScreeningData] = useState(null);
 
   // Auth & Roles
   const { profile, officerRecord } = useAuth();
@@ -696,6 +698,13 @@ export default function AdminComplaintDetailsPage({ backTo = '/admin/complaints'
                 isAdmin={isAdmin}
                 onDecisionSaved={loadDetails}
               />
+              <AdminScreeningPanel
+                complaintId={complaint.id}
+                complaintStatus={complaint.status}
+                isAdmin={isAdmin}
+                onScreeningUpdated={loadDetails}
+                onDataLoaded={setScreeningData}
+              />
               <AdminDuplicateLinksPanel
                 complaintId={complaint.id}
                 isAdmin={isAdmin}
@@ -728,6 +737,30 @@ export default function AdminComplaintDetailsPage({ backTo = '/admin/complaints'
               </div>
               <StatusBadge status={complaint.status} size="sm" />
             </div>
+
+            {isAdmin && screeningData?.review && (
+              <div className="flex flex-wrap items-center gap-2 text-[11px]">
+                {['needs_review', 'priority_review', 'confirmed_suspicious', 'reverted'].includes(
+                  screeningData.review.review_status
+                ) && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold bg-amber-50 text-amber-800 border border-amber-200">
+                    Needs Review{screeningData.review.mode === 'shadow' ? ' (Shadow)' : ''}
+                  </span>
+                )}
+                {complaint.status === 'under_review' &&
+                  screeningData.review.applied_advance === true &&
+                  screeningData.review.advancement_outcome !== 'reverted' && (
+                    <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold bg-indigo-50 text-indigo-800 border border-indigo-200">
+                      Advanced by AI
+                    </span>
+                  )}
+                {screeningData.review.review_status === 'dismissed' && (
+                  <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full font-bold bg-slate-100 text-slate-700 border border-slate-300">
+                    Dismissed{screeningData.review.mode === 'shadow' ? ' (Shadow)' : ''}
+                  </span>
+                )}
+              </div>
+            )}
 
             {/* Terminal State Warning */}
             {complaint.status === 'resolved' || complaint.status === 'rejected' ? (

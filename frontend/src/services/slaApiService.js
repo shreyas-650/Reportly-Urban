@@ -551,3 +551,65 @@ export function triggerAdminOfficerRouting(complaintId, options = {}) {
     }
   );
 }
+
+export function fetchAdminScreeningQueue(filters = {}, options = {}) {
+  return apiRequest('/api/admin/screening', {
+    method: 'GET',
+    query: filters,
+    ...options,
+  });
+}
+
+export function fetchAdminComplaintScreening(complaintId, options = {}) {
+  return apiRequest(
+    `/api/admin/complaints/${encodeURIComponent(complaintId)}/screening`,
+    {
+      method: 'GET',
+      ...options,
+    }
+  );
+}
+
+export function dismissAdminComplaintScreening(complaintId, reason = null, options = {}) {
+  return apiRequest(
+    `/api/admin/complaints/${encodeURIComponent(complaintId)}/screening/dismiss`,
+    {
+      method: 'POST',
+      body: { reason: reason || null },
+      ...options,
+    }
+  );
+}
+
+export function confirmAdminComplaintScreening(complaintId, reason = null, options = {}) {
+  return apiRequest(
+    `/api/admin/complaints/${encodeURIComponent(complaintId)}/screening/confirm`,
+    {
+      method: 'POST',
+      body: { reason: reason || null },
+      ...options,
+    }
+  );
+}
+
+export function keepAdminScreeningAdvancement(complaintId, reason = null, options = {}) {
+  return apiRequest(
+    `/api/admin/complaints/${encodeURIComponent(complaintId)}/screening/keep-advancement`,
+    {
+      method: 'POST',
+      body: { reason: reason || null },
+      ...options,
+    }
+  );
+}
+
+export function revertAdminScreeningAdvancement(complaintId, reason, options = {}) {
+  return apiRequest(
+    `/api/admin/complaints/${encodeURIComponent(complaintId)}/screening/revert-advancement`,
+    {
+      method: 'POST',
+      body: { reason },
+      ...options,
+    }
+  );
+}

@@ -103,6 +103,26 @@ async def run_background_department_routing(complaint_id: str) -> Optional[Dict[
         return {"mode": "off", "skipped": True, "applied": False}
 
     try:
+        from app.services.screening_service import (
+            fetch_active_screening_gate_for_routing,
+            get_screening_mode,
+        )
+
+        if get_screening_mode() == "active":
+            allowed, gate_reason = await fetch_active_screening_gate_for_routing(complaint_id)
+            if not allowed:
+                logger.info(
+                    "department_routing stage=screening_gate outcome=blocked complaint_id=%s reason=%s",
+                    complaint_id,
+                    gate_reason,
+                )
+                return {
+                    "mode": mode,
+                    "skipped": True,
+                    "applied": False,
+                    "reason_code": gate_reason,
+                }
+
         result = await _evaluate_department_routing_rpc(complaint_id)
         logger.info(
             "department_routing stage=complete complaint_id=%s mode=%s applied=%s reason=%s duration_ms=%d",

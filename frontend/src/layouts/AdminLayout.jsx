@@ -69,6 +69,12 @@ export default function AdminLayout() {
       end: false,
     },
     {
+      to: '/admin/screening',
+      label: 'AI Screening',
+      icon: ShieldAlert,
+      end: false,
+    },
+    {
       to: '/admin/sla-rules',
       label: 'SLA Rules',
       icon: Sliders,

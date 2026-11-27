@@ -701,6 +701,20 @@ async def schedule_shadow_category_priority_suggestion(
         complaint_id,
         gemini_client=gemini_client,
     )
+
+    from app.services.screening_service import (
+        get_screening_mode,
+        run_background_complaint_screening,
+    )
+
+    screening_mode = get_screening_mode()
+    if screening_mode == "active":
+        background_tasks.add_task(
+            run_background_complaint_screening,
+            complaint_id,
+            gemini_client=gemini_client,
+        )
+
     from app.services.department_routing_service import (
         get_department_routing_mode,
         run_background_department_routing,
@@ -708,6 +722,13 @@ async def schedule_shadow_category_priority_suggestion(
 
     if get_department_routing_mode() != "off":
         background_tasks.add_task(run_background_department_routing, complaint_id)
+
+    if screening_mode == "shadow":
+        background_tasks.add_task(
+            run_background_complaint_screening,
+            complaint_id,
+            gemini_client=gemini_client,
+        )
     return {"accepted": True, "queued": True}
 
 

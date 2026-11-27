@@ -78,6 +78,18 @@ def _parse_unit_float(raw_value: Optional[str], default: float) -> float:
         return default
 
 
+def _parse_optional_float(raw_value: Optional[str]) -> Optional[float]:
+    if not raw_value or not isinstance(raw_value, str):
+        return None
+    cleaned = raw_value.strip()
+    if not cleaned:
+        return None
+    try:
+        return float(cleaned)
+    except ValueError:
+        return None
+
+
 class Settings(BaseModel):
     # Gemini Configuration
     GEMINI_API_KEY: str = _strip_env_value(os.getenv("GEMINI_API_KEY"), "")
@@ -205,6 +217,50 @@ class Settings(BaseModel):
             .lower()
             != "false"
         )
+    )
+
+    # Phase 9.5 Suspicious / False Claim Screening & Workflow Advancement (default: shadow)
+    SCREENING_MODE: str = Field(
+        default_factory=lambda: parse_department_routing_mode(
+            os.getenv("SCREENING_MODE")
+        )
+    )
+    SCREENING_VERSION: str = _strip_env_value(os.getenv("SCREENING_VERSION"), "v1.0")
+    SCREENING_MIN_ADVANCE_CONFIDENCE: float = _parse_unit_float(
+        os.getenv("SCREENING_MIN_ADVANCE_CONFIDENCE"), default=0.90
+    )
+    SCREENING_MIN_SAMPLES: int = _parse_positive_int(
+        os.getenv("SCREENING_MIN_SAMPLES"), default=50
+    )
+    SCREENING_MIN_ACCURACY: float = _parse_unit_float(
+        os.getenv("SCREENING_MIN_ACCURACY"), default=0.95
+    )
+    SCREENING_METRICS_MAX_AGE_DAYS: int = _parse_positive_int(
+        os.getenv("SCREENING_METRICS_MAX_AGE_DAYS"), default=14
+    )
+    SCREENING_CITIZEN_AI_CAP_24H: int = _parse_positive_int(
+        os.getenv("SCREENING_CITIZEN_AI_CAP_24H"), default=5
+    )
+    SCREENING_RATE_1H_LIMIT: int = _parse_positive_int(
+        os.getenv("SCREENING_RATE_1H_LIMIT"), default=4
+    )
+    SCREENING_RATE_24H_LIMIT: int = _parse_positive_int(
+        os.getenv("SCREENING_RATE_24H_LIMIT"), default=10
+    )
+    SCREENING_TEXT_SIMILARITY_THRESHOLD: float = _parse_unit_float(
+        os.getenv("SCREENING_TEXT_SIMILARITY_THRESHOLD"), default=0.85
+    )
+    SCREENING_CITY_BBOX_MIN_LAT: Optional[float] = _parse_optional_float(
+        os.getenv("SCREENING_CITY_BBOX_MIN_LAT")
+    )
+    SCREENING_CITY_BBOX_MAX_LAT: Optional[float] = _parse_optional_float(
+        os.getenv("SCREENING_CITY_BBOX_MAX_LAT")
+    )
+    SCREENING_CITY_BBOX_MIN_LNG: Optional[float] = _parse_optional_float(
+        os.getenv("SCREENING_CITY_BBOX_MIN_LNG")
+    )
+    SCREENING_CITY_BBOX_MAX_LNG: Optional[float] = _parse_optional_float(
+        os.getenv("SCREENING_CITY_BBOX_MAX_LNG")
     )
 
 settings = Settings()
