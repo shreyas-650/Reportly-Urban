@@ -16,9 +16,13 @@ Reportly Urban enables citizens to report civic infrastructure problems (pothole
 ## Table of Contents
 
 - [Live Demo & Screenshots](#live-demo--screenshots)
+- [Quick Testing Guide (for Reviewers / Judges)](#quick-testing-guide-for-reviewers--judges)
 - [Features](#features)
 - [Tech Stack](#tech-stack)
 - [Architecture](#architecture)
+- [API Endpoints Summary](#api-endpoints-summary)
+- [Core Database Tables](#core-database-tables)
+- [India-Only Geospatial Lock](#india-only-geospatial-lock)
 - [Local Setup](#local-setup)
   - [Prerequisites](#prerequisites)
   - [Environment Variables](#environment-variables)
@@ -44,17 +48,34 @@ Reportly Urban enables citizens to report civic infrastructure problems (pothole
 
 - **Production Web App:** [https://reportly.shreyassingh.dev/](https://reportly.shreyassingh.dev/)
 - **Repository:** [https://github.com/shreyas-650/Reportly-Urban](https://github.com/shreyas-650/Reportly-Urban)
-- **Demo Video:** [Watch / Download Walkthrough (`Reportly-Urban.mp4`)](./docs/assets/Reportly-Urban.mp4)
+- **Demo Video:** [Watch / Download Walkthrough (`Reportly-Urban.mp4`)](./docs/assets/Reportly-Urban.mp4) *(GitHub does not render inline `<video>` tags for repo-relative `.mp4` paths; click the link to view/download, or drag-and-drop the `.mp4` in the GitHub web editor to generate an inline player link.)*
 
-<video src="./docs/assets/Reportly-Urban.mp4" controls width="100%">
-  Your browser or viewer does not support inline video playback. Watch or download <a href="./docs/assets/Reportly-Urban.mp4">Reportly-Urban.mp4</a>.
-</video>
+### Screenshots
 
-> **Screenshots Placeholder**  
-> You can also add static screenshots under `docs/assets/` if needed:
-> - `[Citizen Report Form + India Map Picker]`
-> - `[Public Accountability Dashboard & Issue Map]`
-> - `[Municipal Admin Triage, Escalations & Before/After Verification]`
+#### Citizen Issue Report & India Map Picker
+![Citizen Issue Report Form](./docs/assets/report.png)
+
+#### Public Issue Map
+![Public Issue Map](./docs/assets/map.png)
+
+#### Public Accountability Dashboard
+![Public Accountability Dashboard](./docs/assets/accountability.png)
+
+#### Municipal Admin Console
+![Municipal Admin Console](./docs/assets/muncipal_admin.png)
+
+#### Municipal Dashboard Overview
+![Municipal Dashboard](./docs/assets/muncipal_dashboard.png)
+
+---
+
+## Quick Testing Guide (for Reviewers / Judges)
+
+1. Open the live site: [https://reportly.shreyassingh.dev/](https://reportly.shreyassingh.dev/)
+2. **Sign up as a citizen.** Self-signup works immediately. Then report an issue with a photo and a map pin (inside India), and track it from your dashboard.
+3. **Admin and Officer portals need role provisioning.** For safety, new signups are always citizens. Admin and officer roles are assigned by a maintainer directly in the database and cannot be self-selected in the app. See [Admin User Setup](#admin-user-setup-important) to enable them in your own deployment.
+
+> The backend runs on a free Render instance, so the first request after inactivity can take up to a minute.
 
 ---
 
@@ -106,6 +127,44 @@ flowchart LR
     M["Mapbox API\n(Streets v12 & Geocoding v5)"] <-->|Tiles & India Geocoder| U
     K["UptimeRobot (Every 10 min)"] -->|GET /health| R
 ```
+
+---
+
+## API Endpoints Summary
+
+Interactive docs (Swagger UI): [`https://reportly-urban.onrender.com/docs`](https://reportly-urban.onrender.com/docs)
+
+| Route group | Access | Purpose |
+|---|---|---|
+| `/health` | Public | Health check, used by the uptime monitor |
+| `/api/public/*` | Public | Accountability metrics, public issues, public map data |
+| `/api/ai/*` | Authenticated | Category suggestions, duplicate detection, screening |
+| `/api/citizen/*` | Citizen only | Citizen complaints, rewards and leaderboard |
+| `/api/officer/*` | Officer only | Assigned complaints, status updates, alerts |
+| `/api/admin/*` | Admin only | SLA rules, escalations, disputes, assignment, rewards admin |
+| `/api/internal/sla-sweep` | Internal | Scheduled SLA escalation sweep |
+
+---
+
+## Core Database Tables
+
+| Table | Purpose |
+|---|---|
+| `profiles` | User profile and role (`citizen` / `officer` / `admin`) |
+| `complaints` | Citizen-reported issues, with location, photos and status |
+| `departments` | Municipal departments |
+| `officers` | Officer records linked to departments and wards |
+| `complaint_status_history` | Audit trail of every status change |
+| `category_sla_rules` | Response-time rules per complaint category |
+
+**Security:** Row Level Security (RLS) restricts each role to its own data, triggers enforce rules at the database level (for example, protected profile updates), and public pages only receive generic titles and approximate locations, so citizen and officer personal data is not exposed.
+
+---
+
+## India-Only Geospatial Lock
+
+Complaints are accepted only inside latitude `6.0..37.6` and longitude `68.0..97.6`.
+This is enforced in the Mapbox map and geocoder, in form validation, and in PostgreSQL by the `trg_guard_complaints_india_bounds` trigger.
 
 ---
 
@@ -415,9 +474,15 @@ Reportly-Urban/
 │   └── tests/                             # Node/DB verification scripts
 ├── docs/
 │   ├── assets/
+│   │   ├── accountability.png             # Public Accountability Dashboard screenshot
+│   │   ├── map.png                        # Public Issue Map screenshot
+│   │   ├── muncipal_admin.png             # Municipal Admin Console screenshot
+│   │   ├── muncipal_dashboard.png         # Municipal Dashboard screenshot
+│   │   ├── report.png                     # Citizen Report Form screenshot
 │   │   └── Reportly-Urban.mp4             # Platform walkthrough & demo video
 │   └── ROADMAP.md                         # Project phase status & rollout notes
 ├── AGENTS.md                              # Agent engineering standards & guidelines
+├── LICENSE                                # MIT License
 └── README.md
 ```
 
@@ -440,7 +505,31 @@ See [`docs/ROADMAP.md`](./docs/ROADMAP.md) for detailed phase history, rollout n
 
 ## License
 
-No `LICENSE` file is currently present in the repository root. If publishing publicly for external use, add a `LICENSE` file (for example MIT) before distribution.
+Released under the [MIT License](LICENSE).
+
+```text
+MIT License
+
+Copyright (c) 2026 Shreyas Singh
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+```
 
 ---
 
