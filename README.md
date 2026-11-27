@@ -72,7 +72,14 @@ Reportly Urban enables citizens to report civic infrastructure problems (pothole
 ## Quick Testing Guide (for Reviewers / Judges)
 
 1. Open the live site: [https://reportly.shreyassingh.dev/](https://reportly.shreyassingh.dev/)
-2. **Sign up as a citizen.** Self-signup works immediately. Then report an issue with a photo and a map pin (inside India), and track it from your dashboard.
+2. **Use the demo accounts below** to test all 3 role dashboards (Citizen, Officer, and Admin), or **sign up as a citizen** directly (self-signup works immediately):
+
+| Role | Dashboard | Email | Password |
+|---|---|---|---|
+| **Citizen** | Citizen Dashboard (`/dashboard`) & Issue Reporting (`/report`) | `user@shreyassingh.dev` | `password` |
+| **Officer** | Officer Alerts & Assigned Complaints (`/officer`) | `officer@shreyassingh.dev` | `password` |
+| **Admin** | Municipal Admin Console (`/admin`) | `admin@shreyassingh.dev` | `password` |
+
 3. **Admin and Officer portals need role provisioning.** For safety, new signups are always citizens. Admin and officer roles are assigned by a maintainer directly in the database and cannot be self-selected in the app. See [Admin User Setup](#admin-user-setup-important) to enable them in your own deployment.
 
 > The backend runs on a free Render instance, so the first request after inactivity can take up to a minute.
