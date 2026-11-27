@@ -9,6 +9,7 @@ import PublicComplaintDetailsPage from './pages/PublicComplaintDetailsPage';
 import PublicMapPage from './pages/PublicMapPage';
 import IssueDetailsPage from './pages/IssueDetailsPage';
 import CitizenDashboard from './pages/CitizenDashboard';
+import CitizenRewardsPage from './pages/CitizenRewardsPage';
 import AccessDeniedPage from './pages/AccessDeniedPage';
 import ProtectedRoute from './components/common/ProtectedRoute';
 import AdminLayout from './layouts/AdminLayout';
@@ -22,6 +23,7 @@ import AdminDisputedComplaintsPage from './pages/admin/AdminDisputedComplaintsPa
 import AdminDuplicatesPage from './pages/admin/AdminDuplicatesPage';
 import AdminScreeningQueuePage from './pages/admin/AdminScreeningQueuePage';
 import AdminAccuracyAppealsPage from './pages/admin/AdminAccuracyAppealsPage';
+import AdminRewardsPage from './pages/admin/AdminRewardsPage';
 import AdminSlaRulesPage from './pages/admin/AdminSlaRulesPage';
 import OfficerNotificationsPage from './pages/officer/OfficerNotificationsPage';
 import OfficerComplaintDetailsPage from './pages/officer/OfficerComplaintDetailsPage';
@@ -72,6 +74,14 @@ export default function App() {
                   </ProtectedRoute>
                 }
               />
+              <Route
+                path="rewards"
+                element={
+                  <ProtectedRoute allowedRoles={['citizen', 'admin']}>
+                    <CitizenRewardsPage />
+                  </ProtectedRoute>
+                }
+              />
 
               {/* Protected Officer Routes */}
               <Route
@@ -111,6 +121,7 @@ export default function App() {
               <Route path="duplicates" element={<AdminDuplicatesPage />} />
               <Route path="screening" element={<AdminScreeningQueuePage />} />
               <Route path="ai-accuracy" element={<AdminAccuracyAppealsPage />} />
+              <Route path="rewards" element={<AdminRewardsPage />} />
               <Route path="sla-rules" element={<AdminSlaRulesPage />} />
             </Route>
 

@@ -16,8 +16,10 @@ import {
 import Button from '../components/common/Button';
 import StatisticsCard from '../components/dashboard/StatisticsCard';
 import StatusBadge from '../components/common/StatusBadge';
+import CitizenRewardsSummaryCard from '../components/citizen/CitizenRewardsSummaryCard';
 import { useAuth } from '../context/AuthContext';
 import { fetchCitizenComplaints } from '../services/complaintService';
+import { fetchCitizenRewardsSummary } from '../services/slaApiService';
 import { formatDate } from '../utils/formatters';
 
 const DEFAULT_IMAGE_FALLBACK =
@@ -37,6 +39,7 @@ export default function CitizenDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [filterTab, setFilterTab] = useState('all');
+  const [rewardsSummary, setRewardsSummary] = useState(null);
 
   const loadComplaints = useCallback(async () => {
     if (!user?.id) {
@@ -48,7 +51,11 @@ export default function CitizenDashboard() {
     setError(null);
 
     try {
-      const result = await fetchCitizenComplaints();
+      const [result, rewardsRes] = await Promise.all([
+        fetchCitizenComplaints(),
+        fetchCitizenRewardsSummary().catch(() => null),
+      ]);
+      setRewardsSummary(rewardsRes && rewardsRes.feature_enabled === true ? rewardsRes : null);
 
       if (result.error) {
         setError(result.error.message || 'Failed to retrieve your complaints. Please try again.');
@@ -116,14 +123,20 @@ export default function CitizenDashboard() {
             <p className="text-xs text-slate-500 mt-1">
               {citizenInfo.ward} • {citizenInfo.email}
             </p>
-            <div className="flex items-center gap-3 mt-3">
-              <span className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg">
-                <Award className="w-3.5 h-3.5" /> {citizenInfo.badgeLevel}
-              </span>
-              <span className="text-xs font-medium text-slate-600">
-                Civic Score: <strong>{citizenInfo.civicPoints} pts</strong>
-              </span>
-            </div>
+            {rewardsSummary?.feature_enabled === true && (
+              <div className="flex items-center gap-3 mt-3">
+                <Link
+                  to="/rewards"
+                  className="inline-flex items-center gap-1 text-xs font-semibold text-blue-600 bg-blue-50 px-2.5 py-1 rounded-lg hover:bg-blue-100"
+                >
+                  <Award className="w-3.5 h-3.5" />
+                  {rewardsSummary.badges?.[0]?.title || `${rewardsSummary.badges?.length || 0} Badges`}
+                </Link>
+                <span className="text-xs font-medium text-slate-600">
+                  Civic Rewards: <strong>{rewardsSummary.total_points} pts</strong>
+                </span>
+              </div>
+            )}
           </div>
         </div>
 
@@ -145,6 +158,9 @@ export default function CitizenDashboard() {
           </Button>
         </div>
       </div>
+
+      {/* Phase 10 Citizen Rewards Summary (Rendered ONLY when rewards feature is enabled) */}
+      <CitizenRewardsSummaryCard summary={rewardsSummary} />
 
       {/* KPI Cards */}
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">

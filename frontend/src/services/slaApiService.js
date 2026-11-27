@@ -681,3 +681,50 @@ export function toggleAdminAppealFeature(isEnabled, options = {}) {
     ...options,
   });
 }
+
+export function fetchCitizenRewardsSummary(options = {}) {
+  return apiRequest('/api/citizen/rewards/summary', {
+    method: 'GET',
+    ...options,
+  });
+}
+
+export function fetchCitizenRewardsLeaderboard(filters = {}, options = {}) {
+  return apiRequest('/api/citizen/rewards/leaderboard', {
+    method: 'GET',
+    query: filters,
+    ...options,
+  });
+}
+
+export function fetchAdminRewardsAudit(filters = {}, options = {}) {
+  return apiRequest('/api/admin/rewards/audit', {
+    method: 'GET',
+    query: filters,
+    ...options,
+  });
+}
+
+export function toggleAdminRewardsFeature(isEnabled, options = {}) {
+  return apiRequest('/api/admin/rewards/settings', {
+    method: 'PUT',
+    body: { is_enabled: Boolean(isEnabled) },
+    ...options,
+  });
+}
+
+export function createAdminCommunityChallenge(payload, options = {}) {
+  return apiRequest('/api/admin/rewards/challenges', {
+    method: 'POST',
+    body: payload,
+    ...options,
+  });
+}
+
+export function adjustAdminCitizenRewards(payload, options = {}) {
+  return apiRequest('/api/admin/rewards/adjust', {
+    method: 'POST',
+    body: payload,
+    ...options,
+  });
+}

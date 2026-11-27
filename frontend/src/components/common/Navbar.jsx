@@ -190,6 +190,14 @@ export default function Navbar() {
                           <LayoutDashboard className="w-4 h-4 text-slate-400" />
                           Citizen Dashboard
                         </Link>
+                        <Link
+                          to="/rewards"
+                          onClick={() => setUserDropdownOpen(false)}
+                          className="flex items-center gap-2.5 px-3.5 py-2 text-xs text-slate-700 hover:bg-slate-50 hover:text-slate-900 font-medium transition-colors"
+                        >
+                          <Award className="w-4 h-4 text-amber-500" />
+                          Rewards &amp; Leaderboard
+                        </Link>
                       </div>
 
                       <div className="border-t border-slate-100 pt-1">
@@ -286,6 +294,14 @@ export default function Navbar() {
                       <span>{citizenInfo.ward}</span>
                     </div>
                   </div>
+                  <Link
+                    to="/rewards"
+                    onClick={handleNavClick}
+                    className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg text-slate-700 hover:bg-slate-50"
+                  >
+                    <Award className="w-4 h-4 text-amber-500" />
+                    <span>Rewards &amp; Leaderboard</span>
+                  </Link>
                   <Button
                     variant="outline"
                     size="md"

@@ -10,6 +10,7 @@ import {
   AlertOctagon,
   Copy,
   BarChart3,
+  Trophy,
   ArrowLeft,
   LogOut,
   ExternalLink,
@@ -79,6 +80,12 @@ export default function AdminLayout() {
       to: '/admin/ai-accuracy',
       label: 'Accuracy & Appeals',
       icon: BarChart3,
+      end: false,
+    },
+    {
+      to: '/admin/rewards',
+      label: 'Rewards & Challenges',
+      icon: Trophy,
       end: false,
     },
     {

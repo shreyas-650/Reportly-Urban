@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 
 from app.config import settings
-from app.routers import health, ai, public, internal, admin_sla, officer, citizen, ai_intelligence, duplicate_detection, department_routing, officer_routing, screening, accuracy_appeals
+from app.routers import health, ai, public, internal, admin_sla, officer, citizen, ai_intelligence, duplicate_detection, department_routing, officer_routing, screening, accuracy_appeals, rewards
 from app.services.sla_service import is_sweep_secret_configured
 
 logger = logging.getLogger("reportly.startup")
@@ -116,6 +116,8 @@ app.include_router(screening.admin_router)
 app.include_router(screening.citizen_router)
 app.include_router(accuracy_appeals.admin_router)
 app.include_router(accuracy_appeals.citizen_router)
+app.include_router(rewards.admin_router)
+app.include_router(rewards.citizen_router)
 
 
 @app.exception_handler(Exception)

@@ -288,4 +288,33 @@ class Settings(BaseModel):
         os.getenv("DASHBOARD_WARD_MIN_SAMPLES"), default=20
     )
 
+    # Phase 10 Citizen Rewards, Badges, Challenges & Leaderboards (default off)
+    REWARDS_FEATURE_ENABLED: bool = Field(
+        default_factory=lambda: parse_fail_closed_bool(
+            os.getenv("REWARDS_FEATURE_ENABLED")
+        )
+    )
+    REWARDS_POINTS_PER_VERIFIED: int = _parse_positive_int(
+        os.getenv("REWARDS_POINTS_PER_VERIFIED"), default=50
+    )
+    REWARDS_DAILY_MAX_POINTS: int = _parse_positive_int(
+        os.getenv("REWARDS_DAILY_MAX_POINTS"), default=150
+    )
+    REWARDS_DAILY_MAX_AWARDS: int = _parse_positive_int(
+        os.getenv("REWARDS_DAILY_MAX_AWARDS"), default=3
+    )
+    REWARDS_WEEKLY_MAX_POINTS: int = _parse_positive_int(
+        os.getenv("REWARDS_WEEKLY_MAX_POINTS"), default=500
+    )
+    REWARDS_WEEKLY_MAX_AWARDS: int = _parse_positive_int(
+        os.getenv("REWARDS_WEEKLY_MAX_AWARDS"), default=10
+    )
+    REWARDS_LEADERBOARD_MIN_GROUP_SIZE: int = max(
+        5,
+        _parse_positive_int(
+            os.getenv("REWARDS_LEADERBOARD_MIN_GROUP_SIZE"), default=20
+        ),
+    )
+    REWARDS_TIMEZONE: str = (os.getenv("REWARDS_TIMEZONE") or "Asia/Kolkata").strip() or "Asia/Kolkata"
+
 settings = Settings()
