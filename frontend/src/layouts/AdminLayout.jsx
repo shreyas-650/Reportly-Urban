@@ -9,6 +9,7 @@ import {
   Sliders,
   AlertOctagon,
   Copy,
+  BarChart3,
   ArrowLeft,
   LogOut,
   ExternalLink,
@@ -72,6 +73,12 @@ export default function AdminLayout() {
       to: '/admin/screening',
       label: 'AI Screening',
       icon: ShieldAlert,
+      end: false,
+    },
+    {
+      to: '/admin/ai-accuracy',
+      label: 'Accuracy & Appeals',
+      icon: BarChart3,
       end: false,
     },
     {

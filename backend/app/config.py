@@ -263,4 +263,29 @@ class Settings(BaseModel):
         os.getenv("SCREENING_CITY_BBOX_MAX_LNG")
     )
 
+    # Phase 9.6 Accuracy Dashboard & Citizen Review Appeals (appeal off by default)
+    APPEAL_FEATURE_ENABLED: bool = Field(
+        default_factory=lambda: parse_fail_closed_bool(
+            os.getenv("APPEAL_FEATURE_ENABLED")
+        )
+    )
+    SCREENING_APPEAL_MIN_AGE_DAYS: int = _parse_positive_int(
+        os.getenv("SCREENING_APPEAL_MIN_AGE_DAYS"), default=3
+    )
+    SCREENING_APPEAL_DAILY_CAP: int = _parse_positive_int(
+        os.getenv("SCREENING_APPEAL_DAILY_CAP"), default=3
+    )
+    SCREENING_APPEAL_COOLDOWN_HOURS: int = _parse_positive_int(
+        os.getenv("SCREENING_APPEAL_COOLDOWN_HOURS"), default=72
+    )
+    SCREENING_APPEAL_LIFETIME_CAP: int = _parse_positive_int(
+        os.getenv("SCREENING_APPEAL_LIFETIME_CAP"), default=3
+    )
+    DASHBOARD_MIN_SAMPLES: int = _parse_positive_int(
+        os.getenv("DASHBOARD_MIN_SAMPLES"), default=20
+    )
+    DASHBOARD_WARD_MIN_SAMPLES: int = _parse_positive_int(
+        os.getenv("DASHBOARD_WARD_MIN_SAMPLES"), default=20
+    )
+
 settings = Settings()

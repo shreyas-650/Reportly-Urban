@@ -17,6 +17,7 @@ import {
 import StatusBadge from '../components/common/StatusBadge';
 import ComplaintTimeline from '../components/issues/ComplaintTimeline';
 import CitizenResolutionVerificationPanel from '../components/issues/CitizenResolutionVerificationPanel';
+import CitizenReviewAppealCard from '../components/issues/CitizenReviewAppealCard';
 import ComplaintLocationMap from '../components/maps/ComplaintLocationMap';
 import Button from '../components/common/Button';
 import { useAuth } from '../context/AuthContext';
@@ -301,13 +302,16 @@ export default function IssueDetailsPage() {
           </div>
 
           {role === 'citizen' && complaint?.id && (
-            <CitizenResolutionVerificationPanel
-              complaintId={complaint.id}
-              complaintStatus={complaint.status}
-              beforeImageUrl={complaint.imageUrl}
-              afterImageUrl={complaint.completionImageUrl}
-              onDecisionSubmitted={loadDetails}
-            />
+            <>
+              <CitizenResolutionVerificationPanel
+                complaintId={complaint.id}
+                complaintStatus={complaint.status}
+                beforeImageUrl={complaint.imageUrl}
+                afterImageUrl={complaint.completionImageUrl}
+                onDecisionSubmitted={loadDetails}
+              />
+              <CitizenReviewAppealCard complaintId={complaint.id} />
+            </>
           )}
 
           {/* Department Responsibility & Priority Card */}

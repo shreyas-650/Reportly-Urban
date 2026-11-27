@@ -613,3 +613,71 @@ export function revertAdminScreeningAdvancement(complaintId, reason, options = {
     }
   );
 }
+
+export function fetchCitizenReviewAppealStatus(complaintId, options = {}) {
+  return apiRequest(
+    `/api/citizen/complaints/${encodeURIComponent(complaintId)}/review-appeal/status`,
+    {
+      method: 'GET',
+      ...options,
+    }
+  );
+}
+
+export function submitCitizenReviewAppeal(complaintId, appealText, options = {}) {
+  return apiRequest(
+    `/api/citizen/complaints/${encodeURIComponent(complaintId)}/review-appeal`,
+    {
+      method: 'POST',
+      body: { appeal_text: appealText },
+      ...options,
+    }
+  );
+}
+
+export function fetchAdminAccuracyDashboard(filters = {}, options = {}) {
+  return apiRequest('/api/admin/ai-accuracy', {
+    method: 'GET',
+    query: filters,
+    ...options,
+  });
+}
+
+export function fetchAdminWardFairness(filters = {}, options = {}) {
+  return apiRequest('/api/admin/ai-accuracy/wards', {
+    method: 'GET',
+    query: filters,
+    ...options,
+  });
+}
+
+export function fetchAdminReviewAppeals(filters = {}, options = {}) {
+  return apiRequest('/api/admin/appeals', {
+    method: 'GET',
+    query: filters,
+    ...options,
+  });
+}
+
+export function decideAdminReviewAppeal(
+  appealId,
+  { outcome, reason = null, is_correction = false },
+  options = {}
+) {
+  return apiRequest(
+    `/api/admin/appeals/${encodeURIComponent(appealId)}/decide`,
+    {
+      method: 'POST',
+      body: { outcome, reason, is_correction },
+      ...options,
+    }
+  );
+}
+
+export function toggleAdminAppealFeature(isEnabled, options = {}) {
+  return apiRequest('/api/admin/appeals/settings', {
+    method: 'PUT',
+    body: { is_enabled: Boolean(isEnabled) },
+    ...options,
+  });
+}
