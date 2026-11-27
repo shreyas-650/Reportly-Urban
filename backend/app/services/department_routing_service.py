@@ -112,6 +112,14 @@ async def run_background_department_routing(complaint_id: str) -> Optional[Dict[
             (result or {}).get("reason_code", "-"),
             int((time.monotonic() - started) * 1000),
         )
+        if (result or {}).get("applied") is True:
+            from app.services.officer_routing_service import (
+                get_officer_routing_mode,
+                run_background_officer_routing,
+            )
+
+            if get_officer_routing_mode() != "off":
+                await run_background_officer_routing(complaint_id)
         return result
     except Exception:
         logger.exception(

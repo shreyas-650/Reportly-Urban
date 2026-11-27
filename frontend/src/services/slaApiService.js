@@ -540,3 +540,14 @@ export function dismissAdminDuplicateLink(linkId, options = {}) {
     }
   );
 }
+
+export function triggerAdminOfficerRouting(complaintId, options = {}) {
+  return apiRequest(
+    `/api/admin/complaints/${encodeURIComponent(complaintId)}/officer-routing`,
+    {
+      method: 'POST',
+      body: {},
+      ...options,
+    }
+  );
+}

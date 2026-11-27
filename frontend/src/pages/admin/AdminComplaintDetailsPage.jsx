@@ -40,6 +40,7 @@ import {
   registerOfficerResolutionPhoto,
   resolveAdminComplaint,
   resolveOfficerComplaint,
+  triggerAdminOfficerRouting,
   uploadAdminResolutionPhoto,
   uploadOfficerResolutionPhoto,
 } from '../../services/slaApiService';
@@ -349,6 +350,13 @@ export default function AdminComplaintDetailsPage({ backTo = '/admin/complaints'
         setSaveError(res.error.message || 'Failed to update complaint assignment.');
       } else {
         setSaveSuccess(true);
+        if (selectedDeptId && !selectedOfficerId) {
+          try {
+            await triggerAdminOfficerRouting(complaint.id);
+          } catch (routingErr) {
+            console.warn('[AdminComplaintDetails] Phase 9.3 officer routing hook skipped:', routingErr?.message || routingErr);
+          }
+        }
         // Reload details to get fresh audit timeline and updated_at
         await loadDetails();
       }

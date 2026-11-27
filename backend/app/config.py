@@ -189,4 +189,22 @@ class Settings(BaseModel):
         os.getenv("DEPARTMENT_AUTO_ASSIGN_MIN_CONFIDENCE"), default=0.85
     )
 
+    # Phase 9.3 AI Officer Auto-Assignment (safety-first default: shadow)
+    OFFICER_AUTO_ASSIGN_MODE: str = Field(
+        default_factory=lambda: parse_department_routing_mode(
+            os.getenv("OFFICER_AUTO_ASSIGN_MODE")
+        )
+    )
+    OFFICER_AUTO_ASSIGN_MAX_OPEN_COMPLAINTS: int = _parse_positive_int(
+        os.getenv("OFFICER_AUTO_ASSIGN_MAX_OPEN_COMPLAINTS"), default=10
+    )
+    OFFICER_AUTO_ASSIGN_ALLOW_NULL_WARD_FALLBACK: bool = Field(
+        default_factory=lambda: (
+            (os.getenv("OFFICER_AUTO_ASSIGN_ALLOW_NULL_WARD_FALLBACK") or "true")
+            .strip()
+            .lower()
+            != "false"
+        )
+    )
+
 settings = Settings()
