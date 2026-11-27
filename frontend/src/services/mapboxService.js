@@ -140,6 +140,12 @@ export async function searchAddress(query, token = MAPBOX_PUBLIC_TOKEN, options 
       url += `&country=${encodeURIComponent(options.country)}`;
     }
 
+    if (Array.isArray(options.bbox) && options.bbox.length === 4) {
+      url += `&bbox=${options.bbox.join(',')}`;
+    } else if (typeof options.bbox === 'string' && options.bbox.trim()) {
+      url += `&bbox=${encodeURIComponent(options.bbox.trim())}`;
+    }
+
     const res = await fetch(url);
 
     if (res.status === 429) {
@@ -191,7 +197,7 @@ export async function reverseGeocode(lng, lat, token = MAPBOX_PUBLIC_TOKEN) {
       return { data: null, error: new Error('Mapbox public access token is not configured.') };
     }
 
-    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${Number(lng).toFixed(6)},${Number(lat).toFixed(6)}.json?access_token=${token}&types=address,poi,neighborhood,locality`;
+    const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${Number(lng).toFixed(6)},${Number(lat).toFixed(6)}.json?access_token=${token}&types=address,poi,neighborhood,locality,place,country`;
 
     const res = await fetch(url);
 
@@ -226,12 +232,39 @@ export async function reverseGeocode(lng, lat, token = MAPBOX_PUBLIC_TOKEN) {
     const primaryFeature = features[0];
     const placeName = primaryFeature.place_name || '';
     const streetAddress = primaryFeature.text || placeName;
+    const context = Array.isArray(primaryFeature.context) ? [...primaryFeature.context] : [];
+
+    const hasCountryInContext = context.some(
+      (entry) =>
+        entry &&
+        typeof entry === 'object' &&
+        typeof entry.id === 'string' &&
+        (entry.id === 'country' || entry.id.startsWith('country.'))
+    );
+
+    if (!hasCountryInContext) {
+      const countryFeature = features.find(
+        (f) =>
+          f &&
+          typeof f === 'object' &&
+          typeof f.id === 'string' &&
+          (f.id === 'country' || f.id.startsWith('country.')) &&
+          f.properties?.short_code
+      );
+      if (countryFeature) {
+        context.push({
+          id: countryFeature.id,
+          short_code: countryFeature.properties.short_code,
+          text: countryFeature.text || '',
+        });
+      }
+    }
 
     return {
       data: {
         placeName,
         streetAddress,
-        context: primaryFeature.context || [],
+        context,
       },
       error: null,
     };

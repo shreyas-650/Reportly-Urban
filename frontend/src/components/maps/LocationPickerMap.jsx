@@ -18,6 +18,15 @@ import {
   reverseGeocode,
   formatCoordinatesText,
 } from '../../services/mapboxService';
+import {
+  INDIA_COUNTRY_CODE,
+  INDIA_GEO_BBOX_ARRAY,
+  INDIA_MAP_MAX_BOUNDS,
+  INDIA_MAP_MIN_ZOOM,
+  INDIA_OUTSIDE_ERROR,
+  isOutsideIndiaGeocodeContext,
+  isWithinIndiaBounds,
+} from '../../utils/indiaGeoBounds';
 
 // Default center: Bengaluru municipal hub [lng, lat] (or general urban coordinate)
 const DEFAULT_CENTER = [77.5946, 12.9716];
@@ -51,7 +60,11 @@ export default function LocationPickerMap({
 
   // Active pin state
   const [selectedCoords, setSelectedCoords] = useState(() => {
-    if (coordinates && isValidCoordinate(coordinates.latitude, coordinates.longitude)) {
+    if (
+      coordinates &&
+      isValidCoordinate(coordinates.latitude, coordinates.longitude) &&
+      isWithinIndiaBounds(Number(coordinates.latitude), Number(coordinates.longitude))
+    ) {
       return [Number(coordinates.longitude), Number(coordinates.latitude)];
     }
     return null;
@@ -77,6 +90,9 @@ export default function LocationPickerMap({
         style: 'mapbox://styles/mapbox/streets-v12',
         center: initialCenter,
         zoom: initialZoom,
+        minZoom: INDIA_MAP_MIN_ZOOM,
+        maxBounds: INDIA_MAP_MAX_BOUNDS,
+        renderWorldCopies: false,
         attributionControl: true,
       });
 
@@ -110,38 +126,72 @@ export default function LocationPickerMap({
   // ---------------------------------------------------------------------------
   // Handle Marker Creation & Drag Events
   // ---------------------------------------------------------------------------
+  const rejectOutsideIndia = useCallback(() => {
+    requestIdRef.current += 1;
+    setIsReverseGeocoding(false);
+    setSelectedCoords(null);
+    setResolvedAddress('');
+    setGpsAccuracy(null);
+    setGpsError(INDIA_OUTSIDE_ERROR);
+
+    if (typeof onLocationSelect === 'function') {
+      onLocationSelect({
+        latitude: null,
+        longitude: null,
+        address: '',
+        placeName: '',
+      });
+    }
+  }, [onLocationSelect]);
+
   const handleMarkerDragEnd = useCallback(
     async (lngLat) => {
       const lng = lngLat.lng;
       const lat = lngLat.lat;
 
-      setSelectedCoords([lng, lat]);
+      if (!isWithinIndiaBounds(lat, lng)) {
+        rejectOutsideIndia();
+        return false;
+      }
+
       setGpsError(null);
 
       // Perform reverse geocoding with sequential request cancellation
       const reqId = ++requestIdRef.current;
       setIsReverseGeocoding(true);
 
-      const { data, error } = await reverseGeocode(lng, lat);
+      const { data } = await reverseGeocode(lng, lat);
 
-      if (reqId === requestIdRef.current) {
-        setIsReverseGeocoding(false);
-        const newAddress = data?.streetAddress || data?.placeName || '';
-        if (newAddress) {
-          setResolvedAddress(newAddress);
-        }
-
-        if (typeof onLocationSelect === 'function') {
-          onLocationSelect({
-            latitude: Number(lat.toFixed(6)),
-            longitude: Number(lng.toFixed(6)),
-            address: newAddress,
-            placeName: data?.placeName || '',
-          });
-        }
+      if (reqId !== requestIdRef.current) {
+        return false;
       }
+
+      setIsReverseGeocoding(false);
+
+      if (isOutsideIndiaGeocodeContext(data?.context)) {
+        rejectOutsideIndia();
+        return false;
+      }
+
+      setSelectedCoords([lng, lat]);
+
+      const newAddress = data?.streetAddress || data?.placeName || '';
+      if (newAddress) {
+        setResolvedAddress(newAddress);
+      }
+
+      if (typeof onLocationSelect === 'function') {
+        onLocationSelect({
+          latitude: Number(lat.toFixed(6)),
+          longitude: Number(lng.toFixed(6)),
+          address: newAddress,
+          placeName: data?.placeName || '',
+        });
+      }
+
+      return true;
     },
-    [onLocationSelect]
+    [onLocationSelect, rejectOutsideIndia]
   );
 
   // Sync Marker with selectedCoords
@@ -202,10 +252,12 @@ export default function LocationPickerMap({
 
     const map = mapInstanceRef.current;
 
-    const handleMapClick = (e) => {
+    const handleMapClick = async (e) => {
       const { lng, lat } = e.lngLat;
-      handleMarkerDragEnd({ lng, lat });
-      map.easeTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 15) });
+      const accepted = await handleMarkerDragEnd({ lng, lat });
+      if (accepted) {
+        map.easeTo({ center: [lng, lat], zoom: Math.max(map.getZoom(), 15) });
+      }
     };
 
     map.on('click', handleMapClick);
@@ -234,19 +286,23 @@ export default function LocationPickerMap({
         setGpsLoading(false);
         const lat = pos.coords.latitude;
         const lng = pos.coords.longitude;
-        setGpsAccuracy(Math.round(pos.coords.accuracy));
 
-        setSelectedCoords([lng, lat]);
-
-        if (mapInstanceRef.current) {
-          mapInstanceRef.current.flyTo({
-            center: [lng, lat],
-            zoom: 16,
-            essential: true,
-          });
+        if (!isWithinIndiaBounds(lat, lng)) {
+          rejectOutsideIndia();
+          return;
         }
 
-        handleMarkerDragEnd({ lng, lat });
+        setGpsAccuracy(Math.round(pos.coords.accuracy));
+
+        handleMarkerDragEnd({ lng, lat }).then((accepted) => {
+          if (accepted && mapInstanceRef.current) {
+            mapInstanceRef.current.flyTo({
+              center: [lng, lat],
+              zoom: 16,
+              essential: true,
+            });
+          }
+        });
       },
       (err) => {
         setGpsLoading(false);
@@ -283,6 +339,8 @@ export default function LocationPickerMap({
       const proximity = selectedCoords || DEFAULT_CENTER;
       const { data, error } = await searchAddress(searchQuery, MAPBOX_PUBLIC_TOKEN, {
         proximity,
+        country: INDIA_COUNTRY_CODE,
+        bbox: INDIA_GEO_BBOX_ARRAY,
       });
 
       setIsSearching(false);
@@ -300,6 +358,13 @@ export default function LocationPickerMap({
   const handleSelectSuggestion = (item) => {
     if (!item.coordinates) return;
     const [lng, lat] = item.coordinates;
+
+    if (!isWithinIndiaBounds(lat, lng) || isOutsideIndiaGeocodeContext(item.context)) {
+      setSearchQuery('');
+      setShowSuggestions(false);
+      rejectOutsideIndia();
+      return;
+    }
 
     setSelectedCoords([lng, lat]);
     setResolvedAddress(item.placeName);

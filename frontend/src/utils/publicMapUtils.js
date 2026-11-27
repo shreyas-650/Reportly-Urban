@@ -12,6 +12,7 @@ import {
   sanitizePublicComplaint,
 } from '../services/publicService.js';
 import { formatDate, formatStatusLabel } from './formatters.js';
+import { isWithinIndiaBounds } from './indiaGeoBounds.js';
 
 export const PUBLIC_MAP_MAX_ZOOM = 16;
 export const PUBLIC_MAP_DEFAULT_CENTER = Object.freeze([77.5946, 12.9716]);
@@ -95,13 +96,12 @@ export function validatePublicMapboxToken(token) {
 }
 
 /**
- * Validates public map coordinates strictly as finite JSON numbers within [-90, 90] x [-180, 180].
- * Rejects null, undefined, NaN, Infinity, non-numeric values, and strings.
+ * Validates public map coordinates strictly as finite JSON numbers within India bounds
+ * (latitude 6.0..37.6, longitude 68.0..97.6).
+ * Rejects null, undefined, NaN, Infinity, non-numeric values, strings, and non-India coordinates.
  */
 export function isValidPublicMapCoordinate(lat, lng) {
-  if (typeof lat !== 'number' || typeof lng !== 'number') return false;
-  if (!Number.isFinite(lat) || !Number.isFinite(lng)) return false;
-  return lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180;
+  return isWithinIndiaBounds(lat, lng);
 }
 
 /**

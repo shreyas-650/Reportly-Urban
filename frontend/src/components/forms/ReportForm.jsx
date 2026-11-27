@@ -25,6 +25,7 @@ import { ISSUE_CATEGORIES, WARDS } from '../../data/categories';
 import { useAuth } from '../../context/AuthContext';
 import { createComplaint, UUID_V4_REGEX } from '../../services/complaintService';
 import { analyzeIncidentPhoto } from '../../services/aiService';
+import { INDIA_OUTSIDE_ERROR, isWithinIndiaBounds } from '../../utils/indiaGeoBounds';
 
 const PENDING_SUBMISSION_KEY = 'reportly_pending_submission';
 
@@ -210,6 +211,14 @@ export default function ReportForm({ onStartFresh } = {}) {
 
     if (!selectedFile && !uploadedStoragePath) {
       newErrors.image = 'A clear photograph of the issue is required for verification.';
+    }
+
+    const hasLat = formData.latitude != null;
+    const hasLng = formData.longitude != null;
+    if (hasLat !== hasLng) {
+      newErrors.coordinates = 'Please pin a valid location within India or clear the map pin.';
+    } else if (hasLat && !isWithinIndiaBounds(Number(formData.latitude), Number(formData.longitude))) {
+      newErrors.coordinates = INDIA_OUTSIDE_ERROR;
     }
 
     setErrors(newErrors);
@@ -773,11 +782,18 @@ export default function ReportForm({ onStartFresh } = {}) {
                   longitude,
                   location: prev.location.trim() ? prev.location : (address || prev.location),
                 }));
-                if (address && !formData.location.trim()) {
-                  setErrors((prev) => ({ ...prev, location: null }));
-                }
+                setErrors((prev) => ({
+                  ...prev,
+                  coordinates: null,
+                  ...(address && !formData.location.trim() ? { location: null } : {}),
+                }));
               }}
             />
+            {errors.coordinates && (
+              <p className="mt-1.5 text-xs text-rose-500 flex items-center gap-1">
+                <AlertCircle className="w-3.5 h-3.5" /> {errors.coordinates}
+              </p>
+            )}
           </div>
 
           <label className="block text-sm font-semibold text-slate-800 mb-1.5">

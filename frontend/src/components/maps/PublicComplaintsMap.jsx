@@ -13,6 +13,10 @@ import {
   groupPointsAtLocation,
   validatePublicMapboxToken,
 } from '../../utils/publicMapUtils';
+import {
+  INDIA_MAP_MAX_BOUNDS,
+  INDIA_MAP_MIN_ZOOM,
+} from '../../utils/indiaGeoBounds';
 
 const SOURCE_ID = 'public-complaints-source';
 const CLUSTER_LAYER_ID = 'public-complaints-clusters';
@@ -347,7 +351,10 @@ export default function PublicComplaintsMap({
         style: 'mapbox://styles/mapbox/streets-v12',
         center: initialCenter,
         zoom: 11,
+        minZoom: INDIA_MAP_MIN_ZOOM,
         maxZoom: PUBLIC_MAP_MAX_ZOOM,
+        maxBounds: INDIA_MAP_MAX_BOUNDS,
+        renderWorldCopies: false,
       });
 
       if (typeof mapboxglLib.NavigationControl === 'function') {

@@ -5,6 +5,11 @@ import {
   generateStoragePath,
   uploadComplaintImage,
 } from './storageService.js';
+import {
+  INDIA_OUTSIDE_ERROR,
+  isIndiaBoundsDbError,
+  isWithinIndiaBounds,
+} from '../utils/indiaGeoBounds.js';
 
 export const VALID_CIVIC_CATEGORIES = [
   'potholes',
@@ -98,7 +103,17 @@ export function validateComplaintInput(data) {
     return { valid: false, error: 'Complaint data is required.' };
   }
 
-  const { title, category, ward, location, description, file, uploadedStoragePath } = data;
+  const {
+    title,
+    category,
+    ward,
+    location,
+    description,
+    file,
+    uploadedStoragePath,
+    latitude,
+    longitude,
+  } = data;
 
   if (!title || typeof title !== 'string' || title.trim().length < 5) {
     return { valid: false, error: 'Title must be at least 5 characters long.' };
@@ -129,6 +144,19 @@ export function validateComplaintInput(data) {
 
   if (!uploadedStoragePath && !file) {
     return { valid: false, error: 'A clear photograph of the issue is required.' };
+  }
+
+  const hasLat = latitude !== null && latitude !== undefined && latitude !== '';
+  const hasLng = longitude !== null && longitude !== undefined && longitude !== '';
+  if (hasLat !== hasLng) {
+    return { valid: false, error: 'Both latitude and longitude must be provided together.' };
+  }
+  if (hasLat && hasLng) {
+    const parsedLat = typeof latitude === 'number' ? latitude : Number(latitude);
+    const parsedLng = typeof longitude === 'number' ? longitude : Number(longitude);
+    if (!isWithinIndiaBounds(parsedLat, parsedLng)) {
+      return { valid: false, error: INDIA_OUTSIDE_ERROR };
+    }
   }
 
   return { valid: true, error: null };
@@ -273,6 +301,8 @@ export async function createComplaint({
       description,
       file,
       uploadedStoragePath: activeStoragePath,
+      latitude,
+      longitude,
     });
 
     if (!validation.valid) {
@@ -449,6 +479,16 @@ export async function createComplaint({
         }
 
         const err = new Error(`Database constraint violation: ${error.message}`);
+        return {
+          data: null,
+          error: attachDiagnosticDetails(err, error),
+          orphanedStoragePath: activeStoragePath,
+          isUnresolved: false,
+        };
+      }
+
+      if (isIndiaBoundsDbError(error)) {
+        const err = new Error(INDIA_OUTSIDE_ERROR);
         return {
           data: null,
           error: attachDiagnosticDetails(err, error),
