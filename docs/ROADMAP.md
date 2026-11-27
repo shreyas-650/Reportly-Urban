@@ -11,17 +11,23 @@ Status: Phases 1 to 8, 9.1, and 9.4 are complete (Phase 7 = SLA rules, escalatio
 
 ## Phase 9: AI Complaint Intelligence (starts with suggest-only)
 - [x] 9.1 AI category and priority suggestions in shadow mode (stores suggestions, changes nothing, admin accepts or overrides).
-- 9.2 Department auto-assignment (only after 9.1 accuracy is proven).
-- 9.3 Officer auto-assignment using eligibility and workload rules.
+- [x] 9.2 Department auto-assignment (only after 9.1 accuracy is proven).
+  - Built and verified on Supabase. Default mode is shadow; switch to active only after accuracy data exists.
+- [x] 9.3 Officer auto-assignment using eligibility and workload rules.
+  - Built and verified on Supabase. Default mode is shadow; switch to active only after accuracy data exists.
 - [x] 9.4 Duplicate detection: flag and link potential duplicates, never silently reject.
-- 9.5 Suspicious or false claim screening: send to "needs more information" or review, never auto-reject.
-- 9.6 Accuracy dashboard (including accuracy by ward) and an appeal path for complaints held back by the AI. Do NOT build any reopen feature here; reopening is Phase 8.
+- [x] 9.5 Suspicious or false claim screening: send to "needs more information" or review, never auto-reject.
+  - Built and verified. SCREENING_MODE default is shadow.
+- [x] 9.6 Accuracy dashboard (including accuracy by ward) and an appeal path for complaints held back by the AI. Do NOT build any reopen feature here; reopening is Phase 8.
+  - Built and verified. Appeals are OFF by default (backend flag and database setting).
 - 9.7 Narrow automatic rejection only for objective cases, after measuring false-positive rates.
+  - Waiting until the 9.5 accuracy dashboard shows enough verified samples and a measured false-positive rate.
 - Rules for all of Phase 9: a feature flag that switches AI off completely; a confidence score and a saved record for every AI decision; a Gemini failure never blocks a complaint; no citizen name, phone or email is ever sent to the AI; descriptions and image text are untrusted input; share the Gemini quota/call pattern with Phase 8 instead of building a second one.
 
 ## Phase 10: Citizen Rewards
-- Points for valid, verified reports (only reports verified through Phase 8), badges, ward-wise leaderboards, community challenges.
-- Do NOT build duplicate or fraud detection here. Read the flags from Phase 9.4 and 9.5.
+- [x] Points for valid, verified reports (only reports verified through Phase 8), badges, ward-wise leaderboards, community challenges.
+- [x] Do NOT build duplicate or fraud detection here. Read the flags from Phase 9.4 and 9.5.
+  - Built and verified. Rewards are OFF by default; first_enabled_at is set once when first enabled.
 
 ## Phase 11: Testing, Optimization and Deployment
 - End-to-end testing, performance and security optimization, deployment to Vercel (frontend) and Render (backend), updated documentation.
