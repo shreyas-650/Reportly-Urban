@@ -3,7 +3,7 @@
 > **Report. Track. Resolve. Verify.**  
 > AI-Powered Urban Issue Reporting and Public Accountability Platform
 
-[![Live Demo](https://img.shields.io/badge/Live%20Demo-reportly.shreyassingh.dev-0f766e?style=for-the-badge)](https://reportly.shreyassingh.dev)
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-reportly.shreyassingh.dev-0f766e?style=for-the-badge)](https://reportly.shreyassingh.dev/)
 [![GitHub Repo](https://img.shields.io/badge/GitHub-shreyas--650%2FReportly--Urban-181717?style=for-the-badge&logo=github)](https://github.com/shreyas-650/Reportly-Urban)
 [![Frontend](https://img.shields.io/badge/Frontend-React%20%2B%20Vite-2563eb?style=flat-square)](./frontend)
 [![Backend](https://img.shields.io/badge/Backend-FastAPI%20%2B%20Python-059669?style=flat-square)](./backend)
@@ -42,11 +42,16 @@ Reportly Urban enables citizens to report civic infrastructure problems (pothole
 
 ## Live Demo & Screenshots
 
-- **Production Web App:** [https://reportly.shreyassingh.dev](https://reportly.shreyassingh.dev)
+- **Production Web App:** [https://reportly.shreyassingh.dev/](https://reportly.shreyassingh.dev/)
 - **Repository:** [https://github.com/shreyas-650/Reportly-Urban](https://github.com/shreyas-650/Reportly-Urban)
+- **Demo Video:** [Watch / Download Walkthrough (`Reportly-Urban.mp4`)](./docs/assets/Reportly-Urban.mp4)
 
-> **Screenshots / Demo Walkthrough Placeholder**  
-> Add your deployed screenshots or walkthrough GIFs in this section (for example stored under `docs/assets/`):
+<video src="./docs/assets/Reportly-Urban.mp4" controls width="100%">
+  Your browser or viewer does not support inline video playback. Watch or download <a href="./docs/assets/Reportly-Urban.mp4">Reportly-Urban.mp4</a>.
+</video>
+
+> **Screenshots Placeholder**  
+> You can also add static screenshots under `docs/assets/` if needed:
 > - `[Citizen Report Form + India Map Picker]`
 > - `[Public Accountability Dashboard & Issue Map]`
 > - `[Municipal Admin Triage, Escalations & Before/After Verification]`
@@ -409,6 +414,8 @@ Reportly-Urban/
 │   ├── scripts/                           # Helper seed/cleanup SQL scripts
 │   └── tests/                             # Node/DB verification scripts
 ├── docs/
+│   ├── assets/
+│   │   └── Reportly-Urban.mp4             # Platform walkthrough & demo video
 │   └── ROADMAP.md                         # Project phase status & rollout notes
 ├── AGENTS.md                              # Agent engineering standards & guidelines
 └── README.md
@@ -439,6 +446,5 @@ No `LICENSE` file is currently present in the repository root. If publishing pub
 
 ## Author
 
-**Shreyas Singh**  
-GitHub: [@shreyas-650](https://github.com/shreyas-650)  
-Live Deployment: [https://reportly.shreyassingh.dev](https://reportly.shreyassingh.dev)
+- **GitHub:** [shreyas-650 (Shreyas Singh)](https://github.com/shreyas-650)
+- **Live Deployment:** [https://reportly.shreyassingh.dev/](https://reportly.shreyassingh.dev/)
