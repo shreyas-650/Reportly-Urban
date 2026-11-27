@@ -5,6 +5,7 @@ import Button from '../components/common/Button';
 import StatisticsCard from '../components/dashboard/StatisticsCard';
 import IssueCategoryCard from '../components/issues/IssueCategoryCard';
 import IssueCard from '../components/issues/IssueCard';
+import { useAuth } from '../context/AuthContext';
 import { ISSUE_CATEGORIES } from '../data/categories';
 import {
   fetchPublicComplaints,
@@ -15,6 +16,9 @@ import {
 
 export default function HomePage() {
   const navigate = useNavigate();
+  const { isAuthenticated, isCitizen } = useAuth();
+  const canReportIssue = !isAuthenticated || isCitizen;
+  const canAccessCitizenDashboard = !isAuthenticated || isCitizen;
 
   const [publicStats, setPublicStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(true);
@@ -123,11 +127,13 @@ export default function HomePage() {
             </p>
 
             <div className="flex flex-col sm:flex-row items-center justify-center gap-3.5">
-              <Link to="/report" className="w-full sm:w-auto">
-                <Button variant="primary" size="lg" className="w-full sm:w-auto px-7" icon={PlusCircle}>
-                  Report an Issue
-                </Button>
-              </Link>
+              {canReportIssue && (
+                <Link to="/report" className="w-full sm:w-auto">
+                  <Button variant="primary" size="lg" className="w-full sm:w-auto px-7" icon={PlusCircle}>
+                    Report an Issue
+                  </Button>
+                </Link>
+              )}
               <Link to="/issues" className="w-full sm:w-auto">
                 <Button variant="outline" size="lg" className="w-full sm:w-auto px-7" icon={Search}>
                   Explore Reported Issues
@@ -297,12 +303,14 @@ export default function HomePage() {
               Select any issue category to view existing reports or file a fresh complaint.
             </p>
           </div>
-          <Link
-            to="/report"
-            className="text-xs font-semibold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1"
-          >
-            File Custom Report <ArrowRight className="w-3.5 h-3.5" />
-          </Link>
+          {canReportIssue && (
+            <Link
+              to="/report"
+              className="text-xs font-semibold text-blue-600 hover:text-blue-700 inline-flex items-center gap-1"
+            >
+              File Custom Report <ArrowRight className="w-3.5 h-3.5" />
+            </Link>
+          )}
         </div>
 
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-5">
@@ -403,16 +411,20 @@ export default function HomePage() {
             </p>
           </div>
           <div className="flex flex-col sm:flex-row gap-3 w-full md:w-auto">
-            <Link to="/report">
-              <Button variant="primary" size="lg" className="w-full sm:w-auto bg-blue-500 hover:bg-blue-600" icon={PlusCircle}>
-                Report an Issue Now
-              </Button>
-            </Link>
-            <Link to="/dashboard">
-              <Button variant="secondary" size="lg" className="w-full sm:w-auto bg-slate-800 hover:bg-slate-700 text-white border border-slate-700">
-                Citizen Dashboard
-              </Button>
-            </Link>
+            {canReportIssue && (
+              <Link to="/report">
+                <Button variant="primary" size="lg" className="w-full sm:w-auto bg-blue-500 hover:bg-blue-600" icon={PlusCircle}>
+                  Report an Issue Now
+                </Button>
+              </Link>
+            )}
+            {canAccessCitizenDashboard && (
+              <Link to="/dashboard">
+                <Button variant="secondary" size="lg" className="w-full sm:w-auto bg-slate-800 hover:bg-slate-700 text-white border border-slate-700">
+                  Citizen Dashboard
+                </Button>
+              </Link>
+            )}
           </div>
         </div>
       </section>

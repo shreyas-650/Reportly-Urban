@@ -51,7 +51,14 @@ export default function App() {
               {/* Public Routes */}
               <Route index element={<HomePage />} />
               <Route path="accountability" element={<AccountabilityDashboardPage />} />
-              <Route path="report" element={<ReportIssuePage />} />
+              <Route
+                path="report"
+                element={
+                  <ProtectedRoute allowedRoles={['citizen']} strictRoleMatch={true}>
+                    <ReportIssuePage />
+                  </ProtectedRoute>
+                }
+              />
               <Route path="issues" element={<ExploreIssuesPage />} />
               <Route path="issues/:reference" element={<PublicComplaintDetailsPage />} />
               <Route path="map" element={<PublicMapPage />} />
@@ -61,7 +68,7 @@ export default function App() {
               <Route
                 path="dashboard"
                 element={
-                  <ProtectedRoute allowedRoles={['citizen', 'admin']}>
+                  <ProtectedRoute allowedRoles={['citizen']} strictRoleMatch={true}>
                     <CitizenDashboard />
                   </ProtectedRoute>
                 }
@@ -77,7 +84,7 @@ export default function App() {
               <Route
                 path="rewards"
                 element={
-                  <ProtectedRoute allowedRoles={['citizen', 'admin']}>
+                  <ProtectedRoute allowedRoles={['citizen']} strictRoleMatch={true}>
                     <CitizenRewardsPage />
                   </ProtectedRoute>
                 }

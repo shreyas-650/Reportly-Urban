@@ -6,6 +6,7 @@ export default function ProtectedRoute({
   children,
   allowedRoles = [],
   requireActiveOfficer = false,
+  strictRoleMatch = false,
 }) {
   const {
     isAuthenticated,
@@ -41,8 +42,10 @@ export default function ProtectedRoute({
 
   // 3. Role-based authorization verification
   if (allowedRoles.length > 0) {
-    // Admins have access to administrative and general portals
-    const hasRoleAccess = allowedRoles.includes(role) || isAdmin;
+    // Strict routes (e.g. citizen-only rewards) forbid implicit admin bypass
+    const hasRoleAccess = strictRoleMatch
+      ? allowedRoles.includes(role)
+      : allowedRoles.includes(role) || isAdmin;
 
     // For officer routes, strictly require a confirmed active officer record
     if (requireActiveOfficer && !isOfficer && !isAdmin) {

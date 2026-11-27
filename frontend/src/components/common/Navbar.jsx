@@ -23,17 +23,28 @@ export default function Navbar() {
   const [userDropdownOpen, setUserDropdownOpen] = useState(false);
   const [authModal, setAuthModal] = useState({ isOpen: false, mode: 'login' });
 
-  const { isAuthenticated, citizenInfo, isOfficer, isAdmin, signOut } = useAuth();
+  const { isAuthenticated, citizenInfo, isOfficer, isAdmin, isCitizen, signOut } = useAuth();
+  const canAccessCitizenDashboard = isCitizen;
+  const canReportIssue = !isAuthenticated || isCitizen;
   const location = useLocation();
   const navigate = useNavigate();
   const dropdownRef = useRef(null);
+  const reportNavCounterRef = useRef(0);
+
+  const handleReportNavClick = (e) => {
+    e.preventDefault();
+    handleNavClick();
+    reportNavCounterRef.current += 1;
+    navigate('/report', {
+      state: { fresh: `${Date.now()}-${reportNavCounterRef.current}` },
+    });
+  };
 
   const navLinks = [
     { label: 'Home', path: '/' },
     { label: 'Accountability', path: '/accountability' },
     { label: 'Explore Issues', path: '/issues' },
     { label: 'Issue Map', path: '/map' },
-    { label: 'Citizen Dashboard', path: '/dashboard' },
   ];
 
   const isActive = (path) => {
@@ -105,17 +116,6 @@ export default function Navbar() {
                   {link.label}
                 </Link>
               ))}
-              <a
-                href="#how-it-works"
-                className="px-3.5 py-1.5 text-sm font-medium rounded-lg text-slate-600 hover:text-slate-900 hover:bg-slate-100/70 transition-colors"
-                onClick={(e) => {
-                  if (location.pathname !== '/') {
-                    window.location.href = '/#how-it-works';
-                  }
-                }}
-              >
-                How It Works
-              </a>
             </nav>
 
             {/* Desktop Action Buttons / Auth State */}
@@ -182,22 +182,26 @@ export default function Navbar() {
                             Municipal Admin Console
                           </Link>
                         )}
-                        <Link
-                          to="/dashboard"
-                          onClick={() => setUserDropdownOpen(false)}
-                          className="flex items-center gap-2.5 px-3.5 py-2 text-xs text-slate-700 hover:bg-slate-50 hover:text-slate-900 font-medium transition-colors"
-                        >
-                          <LayoutDashboard className="w-4 h-4 text-slate-400" />
-                          Citizen Dashboard
-                        </Link>
-                        <Link
-                          to="/rewards"
-                          onClick={() => setUserDropdownOpen(false)}
-                          className="flex items-center gap-2.5 px-3.5 py-2 text-xs text-slate-700 hover:bg-slate-50 hover:text-slate-900 font-medium transition-colors"
-                        >
-                          <Award className="w-4 h-4 text-amber-500" />
-                          Rewards &amp; Leaderboard
-                        </Link>
+                        {canAccessCitizenDashboard && (
+                          <Link
+                            to="/dashboard"
+                            onClick={() => setUserDropdownOpen(false)}
+                            className="flex items-center gap-2.5 px-3.5 py-2 text-xs text-slate-700 hover:bg-slate-50 hover:text-slate-900 font-medium transition-colors"
+                          >
+                            <LayoutDashboard className="w-4 h-4 text-slate-400" />
+                            Citizen Dashboard
+                          </Link>
+                        )}
+                        {isCitizen && (
+                          <Link
+                            to="/rewards"
+                            onClick={() => setUserDropdownOpen(false)}
+                            className="flex items-center gap-2.5 px-3.5 py-2 text-xs text-slate-700 hover:bg-slate-50 hover:text-slate-900 font-medium transition-colors"
+                          >
+                            <Award className="w-4 h-4 text-amber-500" />
+                            Rewards &amp; Leaderboard
+                          </Link>
+                        )}
                       </div>
 
                       <div className="border-t border-slate-100 pt-1">
@@ -232,20 +236,24 @@ export default function Navbar() {
                 </>
               )}
 
-              <Link to="/report">
-                <Button variant="primary" size="md" icon={PlusCircle}>
-                  Report an Issue
-                </Button>
-              </Link>
+              {canReportIssue && (
+                <Link to="/report" onClick={handleReportNavClick}>
+                  <Button variant="primary" size="md" icon={PlusCircle}>
+                    Report an Issue
+                  </Button>
+                </Link>
+              )}
             </div>
 
             {/* Mobile Menu Button */}
             <div className="flex items-center md:hidden gap-2">
-              <Link to="/report">
-                <Button variant="primary" size="sm" icon={PlusCircle}>
-                  Report
-                </Button>
-              </Link>
+              {canReportIssue && (
+                <Link to="/report" onClick={handleReportNavClick}>
+                  <Button variant="primary" size="sm" icon={PlusCircle}>
+                    Report
+                  </Button>
+                </Link>
+              )}
               <button
                 type="button"
                 onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
@@ -275,13 +283,6 @@ export default function Navbar() {
                 {link.label}
               </Link>
             ))}
-            <a
-              href="#how-it-works"
-              onClick={handleNavClick}
-              className="block px-3 py-2 text-base font-medium rounded-lg text-slate-700 hover:bg-slate-50"
-            >
-              How It Works
-            </a>
             
             <div className="pt-3 border-t border-slate-100 flex flex-col gap-2">
               {isAuthenticated ? (
@@ -294,14 +295,46 @@ export default function Navbar() {
                       <span>{citizenInfo.ward}</span>
                     </div>
                   </div>
-                  <Link
-                    to="/rewards"
-                    onClick={handleNavClick}
-                    className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg text-slate-700 hover:bg-slate-50"
-                  >
-                    <Award className="w-4 h-4 text-amber-500" />
-                    <span>Rewards &amp; Leaderboard</span>
-                  </Link>
+                  {isOfficer && (
+                    <Link
+                      to="/officer"
+                      onClick={handleNavClick}
+                      className="flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg text-teal-700 hover:bg-teal-50"
+                    >
+                      <ShieldCheck className="w-4 h-4 text-teal-600" />
+                      <span>Officer Alerts &amp; Reminders</span>
+                    </Link>
+                  )}
+                  {isAdmin && (
+                    <Link
+                      to="/admin"
+                      onClick={handleNavClick}
+                      className="flex items-center gap-2 px-3 py-2 text-sm font-semibold rounded-lg text-blue-700 hover:bg-blue-50"
+                    >
+                      <ShieldCheck className="w-4 h-4 text-blue-600" />
+                      <span>Municipal Admin Console</span>
+                    </Link>
+                  )}
+                  {canAccessCitizenDashboard && (
+                    <Link
+                      to="/dashboard"
+                      onClick={handleNavClick}
+                      className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg text-slate-700 hover:bg-slate-50"
+                    >
+                      <LayoutDashboard className="w-4 h-4 text-slate-400" />
+                      <span>Citizen Dashboard</span>
+                    </Link>
+                  )}
+                  {isCitizen && (
+                    <Link
+                      to="/rewards"
+                      onClick={handleNavClick}
+                      className="flex items-center gap-2 px-3 py-2 text-sm font-medium rounded-lg text-slate-700 hover:bg-slate-50"
+                    >
+                      <Award className="w-4 h-4 text-amber-500" />
+                      <span>Rewards &amp; Leaderboard</span>
+                    </Link>
+                  )}
                   <Button
                     variant="outline"
                     size="md"

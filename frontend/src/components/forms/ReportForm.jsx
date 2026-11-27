@@ -70,7 +70,7 @@ function savePendingSubmission(pending) {
   }
 }
 
-function clearPendingSubmission() {
+export function clearPendingSubmission() {
   try {
     if (typeof window !== 'undefined' && window.sessionStorage) {
       window.sessionStorage.removeItem(PENDING_SUBMISSION_KEY);
@@ -80,7 +80,18 @@ function clearPendingSubmission() {
   }
 }
 
-export default function ReportForm() {
+function revokeObjectUrlIfBlob(url) {
+  if (
+    typeof url === 'string' &&
+    url.startsWith('blob:') &&
+    typeof URL !== 'undefined' &&
+    typeof URL.revokeObjectURL === 'function'
+  ) {
+    URL.revokeObjectURL(url);
+  }
+}
+
+export default function ReportForm({ onStartFresh } = {}) {
   const { isAuthenticated, user } = useAuth();
   const navigate = useNavigate();
 
@@ -133,6 +144,18 @@ export default function ReportForm() {
   const [aiResult, setAiResult] = useState(null);
   const [aiError, setAiError] = useState(null);
   const [overwriteConfirm, setOverwriteConfirm] = useState(null);
+
+  // Revoke any blob preview object URL on unmount to prevent memory leaks
+  const latestImagePreviewRef = useRef(formData.imagePreview);
+  useEffect(() => {
+    latestImagePreviewRef.current = formData.imagePreview;
+  }, [formData.imagePreview]);
+
+  useEffect(() => {
+    return () => {
+      revokeObjectUrlIfBlob(latestImagePreviewRef.current);
+    };
+  }, []);
 
   // Determine if a pending submission belongs to a different citizen account
   const isAccountMismatch = Boolean(
@@ -231,6 +254,7 @@ export default function ReportForm() {
   const removeImage = () => {
     if (isFormLocked) return;
 
+    revokeObjectUrlIfBlob(formData.imagePreview);
     setSelectedFile(null);
     setUploadedStoragePath(null);
     setAiResult(null);
@@ -471,6 +495,9 @@ export default function ReportForm() {
 
   const handleResetForm = () => {
     clearPendingSubmission();
+    revokeObjectUrlIfBlob(formData.imagePreview);
+    submissionLockRef.current = false;
+    setIsSubmitting(false);
     setPendingSubmission(null);
     setFormData({
       title: '',
@@ -491,6 +518,9 @@ export default function ReportForm() {
     setErrors({});
     setSubmissionError(null);
     setCreatedComplaint(null);
+    if (typeof onStartFresh === 'function') {
+      onStartFresh();
+    }
   };
 
   if (createdComplaint) {
@@ -576,7 +606,7 @@ export default function ReportForm() {
             onClick={handleResetForm}
           >
             <PlusCircle className="w-4 h-4" />
-            File Another Complaint
+            Report another issue
           </Button>
           <Button
             variant="outline"

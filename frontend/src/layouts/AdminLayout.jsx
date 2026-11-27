@@ -120,11 +120,11 @@ export default function AdminLayout() {
             <NotificationBell role="admin" darkHeader={true} />
 
             <Link
-              to="/dashboard"
+              to="/"
               className="hidden sm:inline-flex items-center gap-1.5 text-xs text-slate-300 hover:text-white transition-colors py-1.5 px-3 rounded-lg hover:bg-slate-800"
             >
               <ExternalLink className="w-3.5 h-3.5" />
-              Citizen View
+              Public Portal
             </Link>
 
             <div className="h-4 w-px bg-slate-700 hidden sm:block" />

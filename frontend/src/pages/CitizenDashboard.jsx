@@ -26,7 +26,7 @@ const DEFAULT_IMAGE_FALLBACK =
   'https://images.unsplash.com/photo-1515162816999-a0c47dc192f7?auto=format&fit=crop&w=800&q=80';
 
 export default function CitizenDashboard() {
-  const { user, citizenInfo, isAuthenticated } = useAuth();
+  const { user, citizenInfo, isAuthenticated, isCitizen } = useAuth();
 
   const [complaints, setComplaints] = useState([]);
   const [stats, setStats] = useState({
@@ -53,9 +53,11 @@ export default function CitizenDashboard() {
     try {
       const [result, rewardsRes] = await Promise.all([
         fetchCitizenComplaints(),
-        fetchCitizenRewardsSummary().catch(() => null),
+        isCitizen ? fetchCitizenRewardsSummary().catch(() => null) : Promise.resolve(null),
       ]);
-      setRewardsSummary(rewardsRes && rewardsRes.feature_enabled === true ? rewardsRes : null);
+      setRewardsSummary(
+        isCitizen && rewardsRes && rewardsRes.feature_enabled === true ? rewardsRes : null
+      );
 
       if (result.error) {
         setError(result.error.message || 'Failed to retrieve your complaints. Please try again.');
@@ -79,7 +81,7 @@ export default function CitizenDashboard() {
     } finally {
       setLoading(false);
     }
-  }, [user?.id]);
+  }, [user?.id, isCitizen]);
 
   useEffect(() => {
     loadComplaints();
@@ -123,7 +125,7 @@ export default function CitizenDashboard() {
             <p className="text-xs text-slate-500 mt-1">
               {citizenInfo.ward} • {citizenInfo.email}
             </p>
-            {rewardsSummary?.feature_enabled === true && (
+            {isCitizen && rewardsSummary?.feature_enabled === true && (
               <div className="flex items-center gap-3 mt-3">
                 <Link
                   to="/rewards"
@@ -141,11 +143,13 @@ export default function CitizenDashboard() {
         </div>
 
         <div className="flex flex-col sm:flex-row gap-2.5 w-full md:w-auto">
-          <Link to="/report">
-            <Button variant="primary" size="md" className="w-full sm:w-auto" icon={PlusCircle}>
-              Report New Issue
-            </Button>
-          </Link>
+          {isCitizen && (
+            <Link to="/report">
+              <Button variant="primary" size="md" className="w-full sm:w-auto" icon={PlusCircle}>
+                Report New Issue
+              </Button>
+            </Link>
+          )}
           <Button
             variant="outline"
             size="md"
@@ -159,8 +163,8 @@ export default function CitizenDashboard() {
         </div>
       </div>
 
-      {/* Phase 10 Citizen Rewards Summary (Rendered ONLY when rewards feature is enabled) */}
-      <CitizenRewardsSummaryCard summary={rewardsSummary} />
+      {/* Phase 10 Citizen Rewards Summary (Rendered ONLY for citizen role when enabled) */}
+      {isCitizen && <CitizenRewardsSummaryCard summary={rewardsSummary} />}
 
       {/* KPI Cards */}
       <section className="grid grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-6">
@@ -316,11 +320,13 @@ export default function CitizenDashboard() {
             <p className="text-xs text-slate-500 mb-6 leading-relaxed">
               You haven't filed any civic grievances. Report an issue in your locality with a photograph to notify municipal authorities.
             </p>
-            <Link to="/report">
-              <Button variant="primary" size="sm" icon={PlusCircle}>
-                File Your First Complaint
-              </Button>
-            </Link>
+            {isCitizen && (
+              <Link to="/report">
+                <Button variant="primary" size="sm" icon={PlusCircle}>
+                  File Your First Complaint
+                </Button>
+              </Link>
+            )}
           </div>
         ) : (
           /* Filtered Empty State: Complaints exist, but none in selected tab */

@@ -1,8 +1,12 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import { ShieldCheck, PhoneCall, ExternalLink, Heart } from 'lucide-react';
+import { useAuth } from '../../context/AuthContext';
 
 export default function Footer() {
+  const { isAuthenticated, isCitizen } = useAuth();
+  const canReportIssue = !isAuthenticated || isCitizen;
+  const canAccessCitizenDashboard = !isAuthenticated || isCitizen;
   return (
     <footer className="bg-slate-900 text-slate-300 border-t border-slate-800">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12 lg:py-16">
@@ -44,11 +48,13 @@ export default function Footer() {
                   Public Accountability
                 </Link>
               </li>
-              <li>
-                <Link to="/report" className="hover:text-blue-400 transition-colors">
-                  Submit Grievance
-                </Link>
-              </li>
+              {canReportIssue && (
+                <li>
+                  <Link to="/report" className="hover:text-blue-400 transition-colors">
+                    Submit Grievance
+                  </Link>
+                </li>
+              )}
               <li>
                 <Link to="/issues" className="hover:text-blue-400 transition-colors">
                   Explore Reported Issues
@@ -59,11 +65,13 @@ export default function Footer() {
                   Public Issue Map
                 </Link>
               </li>
-              <li>
-                <Link to="/dashboard" className="hover:text-blue-400 transition-colors">
-                  My Grievance Dashboard
-                </Link>
-              </li>
+              {canAccessCitizenDashboard && (
+                <li>
+                  <Link to="/dashboard" className="hover:text-blue-400 transition-colors">
+                    My Grievance Dashboard
+                  </Link>
+                </li>
+              )}
             </ul>
           </div>
 

@@ -11,6 +11,7 @@ import {
   ShieldCheck,
 } from 'lucide-react';
 import Button from '../components/common/Button';
+import { useAuth } from '../context/AuthContext';
 import {
   fetchCitizenRewardsSummary,
   fetchCitizenRewardsLeaderboard,
@@ -18,6 +19,7 @@ import {
 import { formatDate } from '../utils/formatters';
 
 export default function CitizenRewardsPage() {
+  const { isCitizen, loading: authLoading, profileLoading } = useAuth();
   const [summary, setSummary] = useState(null);
   const [leaderboard, setLeaderboard] = useState(null);
   const [selectedWard, setSelectedWard] = useState('');
@@ -25,28 +27,40 @@ export default function CitizenRewardsPage() {
   const [boardLoading, setBoardLoading] = useState(false);
   const [error, setError] = useState(null);
 
-  const loadData = useCallback(async (wardFilter = '') => {
-    setLoading(true);
-    setError(null);
-    try {
-      const [sumData, boardData] = await Promise.all([
-        fetchCitizenRewardsSummary(),
-        fetchCitizenRewardsLeaderboard(wardFilter ? { ward: wardFilter } : {}),
-      ]);
-      setSummary(sumData);
-      setLeaderboard(boardData);
-    } catch (err) {
-      setError(err?.message || 'Unable to load citizen rewards right now.');
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const loadData = useCallback(
+    async (wardFilter = '') => {
+      if (authLoading || profileLoading || !isCitizen) {
+        setLoading(false);
+        return;
+      }
+      setLoading(true);
+      setError(null);
+      try {
+        const [sumData, boardData] = await Promise.all([
+          fetchCitizenRewardsSummary(),
+          fetchCitizenRewardsLeaderboard(wardFilter ? { ward: wardFilter } : {}),
+        ]);
+        setSummary(sumData);
+        setLeaderboard(boardData);
+      } catch (err) {
+        setError(err?.message || 'Unable to load citizen rewards right now.');
+      } finally {
+        setLoading(false);
+      }
+    },
+    [authLoading, profileLoading, isCitizen]
+  );
 
   useEffect(() => {
-    loadData('');
-  }, [loadData]);
+    if (!authLoading && !profileLoading && isCitizen) {
+      loadData('');
+    } else if (!authLoading && !profileLoading && !isCitizen) {
+      setLoading(false);
+    }
+  }, [authLoading, profileLoading, isCitizen, loadData]);
 
   const handleWardChange = async (wardValue) => {
+    if (!isCitizen) return;
     setSelectedWard(wardValue);
     setBoardLoading(true);
     try {
@@ -60,6 +74,16 @@ export default function CitizenRewardsPage() {
       setBoardLoading(false);
     }
   };
+
+  if (!authLoading && !profileLoading && !isCitizen) {
+    return (
+      <div className="max-w-3xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+        <div className="bg-white rounded-3xl border border-slate-200 p-8 text-center text-sm text-slate-600">
+          Citizen rewards are restricted to citizen accounts.
+        </div>
+      </div>
+    );
+  }
 
   if (loading) {
     return (

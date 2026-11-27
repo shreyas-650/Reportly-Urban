@@ -18,6 +18,7 @@ describe('Phase 10 Citizen Rewards UI & Privacy Guards', () => {
     vi.spyOn(authCtx, 'useAuth').mockReturnValue({
       user: { id: 'cit-1' },
       isAuthenticated: true,
+      isCitizen: true,
       citizenInfo: {
         fullName: 'Asha Citizen',
         ward: 'Ward 4',
@@ -56,6 +57,7 @@ describe('Phase 10 Citizen Rewards UI & Privacy Guards', () => {
     vi.spyOn(authCtx, 'useAuth').mockReturnValue({
       user: { id: 'cit-1' },
       isAuthenticated: true,
+      isCitizen: true,
       citizenInfo: {
         fullName: 'Asha Citizen',
         ward: 'Ward 4',
@@ -109,6 +111,11 @@ describe('Phase 10 Citizen Rewards UI & Privacy Guards', () => {
   });
 
   it('CitizenRewardsPage hides suppressed leaderboards and exposes zero internal hold/screening details', async () => {
+    vi.spyOn(authCtx, 'useAuth').mockReturnValue({
+      isCitizen: true,
+      loading: false,
+      profileLoading: false,
+    });
     vi.spyOn(slaApiSvc, 'fetchCitizenRewardsSummary').mockResolvedValue({
       feature_enabled: true,
       anonymous_handle: 'Civic-Member-9F2A1B',

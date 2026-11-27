@@ -1,8 +1,22 @@
-import React from 'react';
+import React, { useEffect, useRef, useState } from 'react';
+import { useLocation } from 'react-router-dom';
 import { ShieldCheck, Info, Camera, CheckSquare, Clock } from 'lucide-react';
-import ReportForm from '../components/forms/ReportForm';
+import ReportForm, { clearPendingSubmission } from '../components/forms/ReportForm';
 
 export default function ReportIssuePage() {
+  const location = useLocation();
+  const freshToken = location.state?.fresh ?? null;
+  const prevFreshRef = useRef(freshToken);
+  const [formInstanceKey, setFormInstanceKey] = useState(0);
+
+  useEffect(() => {
+    if (freshToken && prevFreshRef.current !== freshToken) {
+      prevFreshRef.current = freshToken;
+      clearPendingSubmission();
+      setFormInstanceKey((prev) => prev + 1);
+    }
+  }, [freshToken]);
+
   return (
     <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 lg:py-16">
       
@@ -24,7 +38,10 @@ export default function ReportIssuePage() {
         
         {/* Main Form Column */}
         <div className="lg:col-span-8">
-          <ReportForm />
+          <ReportForm
+            key={formInstanceKey}
+            onStartFresh={() => setFormInstanceKey((prev) => prev + 1)}
+          />
         </div>
 
         {/* Informational Sidebar Column */}
