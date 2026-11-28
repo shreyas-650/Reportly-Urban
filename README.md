@@ -48,7 +48,8 @@ Reportly Urban enables citizens to report civic infrastructure problems (pothole
 
 - **Production Web App:** [https://reportly.shreyassingh.dev/](https://reportly.shreyassingh.dev/)
 - **Repository:** [https://github.com/shreyas-650/Reportly-Urban](https://github.com/shreyas-650/Reportly-Urban)
-- **Demo Video:** [Watch / Download Walkthrough (`Reportly-Urban.mp4`)](./docs/assets/Reportly-Urban.mp4) *(GitHub does not render inline `<video>` tags for repo-relative `.mp4` paths; click the link to view/download, or drag-and-drop the `.mp4` in the GitHub web editor to generate an inline player link.)*
+- **Demo Video (LinkedIn):** [Watch Walkthrough Video](https://lnkd.in/p/dwvkkEPw)
+- **Demo Video File:** [Download Walkthrough (`Reportly-Urban.mp4`)](./docs/assets/Reportly-Urban.mp4) *(GitHub does not render inline `<video>` tags for repo-relative `.mp4` paths; watch on LinkedIn above or download the file here.)*
 
 ### Screenshots
 
